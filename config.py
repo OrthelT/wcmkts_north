@@ -330,7 +330,7 @@ class DatabaseConfig:
                     logger.error("Post-sync integrity check failed.")
 
                 # For market DBs, also validate last_update parity if integrity ok
-                if self.alias == "wcmkt2":
+                if self.alias == "wcmktnorth2":
                     validation_test = self.validate_sync() if ok else False
                     st.session_state.sync_status = "Success" if validation_test else "Failed"
                     if st.session_state.sync_status == "Success":
@@ -340,7 +340,7 @@ class DatabaseConfig:
                 st.session_state.sync_check = False
                 logger.debug(f"Write lock will be released for {self.alias}")
 
-    def validate_sync(self)-> bool:
+    def validate_sync(self, manual: bool = False)-> bool:
         alias = self.alias
         with self.remote_engine.connect() as conn:
             result = conn.execute(text("SELECT MAX(last_update) FROM marketstats")).fetchone()
@@ -350,6 +350,7 @@ class DatabaseConfig:
             result = conn.execute(text("SELECT MAX(last_update) FROM marketstats")).fetchone()
             local_last_update = result[0]
             conn.close()
+        
         logger.info("-"*40)
         logger.info(f"alias: {alias} validate_sync()")
         timestamp = datetime.now(timezone.utc)
@@ -359,6 +360,8 @@ class DatabaseConfig:
         logger.info(f"local_last_update: {local_last_update}")
         logger.info("-"*40)
         validation_test = remote_last_update == local_last_update
+        if manual:
+            return validation_test, remote_last_update, local_last_update
         logger.info(f"validation_test: {validation_test}")
         return validation_test
 

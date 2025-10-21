@@ -318,7 +318,18 @@ def check_db():
             local_update_since = f"{int(local_update_since)} mins"
         else:
             local_update_since = DatabaseConfig("wcmkt").get_time_since_update("marketstats", remote=False)
-        st.toast(f"DB updated: {local_update_since} ago", icon="✅")
+            st.toast(f"DB updated: {local_update_since} ago", icon="✅")
+def manual_db_check():
+    status, remote_last_update, local_last_update = DatabaseConfig("wcmkt").validate_sync(manual=True)
+    logger.info(f"manual_db_check() status: {status}, remote_last_update: {remote_last_update}, local_last_update: {local_last_update}")
+    if status:
+        st.toast(f"Database is synced, remote last update: {remote_last_update}, local last update: {local_last_update}", icon="✅")
+    else:
+        st.toast(f"syncing database, remote last update: {remote_last_update}, local last update: {local_last_update}", icon="🕧")
+        db = DatabaseConfig("wcmkt")
+        db.sync()
+        st.toast("Database synced", icon="✅")
+        check_db()
 
 # Run this once every 600 seconds (10 minutes)
 def maybe_run_check():
@@ -898,7 +909,7 @@ def main():
 
         db_check = st.sidebar.button("Check DB State", width='content')
         if db_check:
-            check_db()
+            manual_db_check()
         st.sidebar.divider()
 
         display_downloads()
