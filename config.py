@@ -295,6 +295,8 @@ class DatabaseConfig:
         connections to prevent corruption. Read-only engine is preserved for
         minimal disruption to concurrent reads after sync completes.
         """
+        logger.info(f"current database info: {self.read_dbinfo()}")
+        logger.info("-"*40)
         # Acquire write lock to block all access during sync
         lock = self._get_local_lock()
         with lock.write_lock():
@@ -319,6 +321,8 @@ class DatabaseConfig:
 
                 update_time = datetime.now(timezone.utc)
                 logger.info(f"Database synced at {update_time} UTC")
+                logger.info(f"new database info: {self.read_dbinfo()}")
+                logger.info("-"*40)
 
                 # Post-sync integrity validation
                 ok = self.integrity_check()
@@ -445,6 +449,13 @@ class DatabaseConfig:
         logger.info(f"time_since: {time_since}")
         return time_since if time_since is not None else None
 
+    def read_dbinfo(self)-> dict:
+        """
+        Read database information from the local database
+        """
+        with open(f"{self.path}-info", "r") as f:
+            data = f.read()
+            return data
 
 if __name__ == "__main__":
     pass
