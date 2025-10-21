@@ -493,13 +493,17 @@ def initialize_main_function():
     st.session_state.db_init_time = datetime.now()
 
 def render_headers():
-    col1, col2 = st.columns([0.2, 0.8], vertical_alignment="bottom")
+    col1, col2, col3 = st.columns([0.2, 0.8, 0.2], vertical_alignment="bottom")
     with col1:
         wclogo = "images/wclogo.png"
         st.image(wclogo, width=125)
     with col2:
         st.title("Winter Coalition Northern Supply")
-        st.text("Market Stats for B-9C24-Staging")
+        st.text("Market Stats for B-9C24-Staging")   
+    with col3:
+        snow_toggle = st.button("Make it Snow", type="secondary", width='content')
+        if snow_toggle:
+            st.snow()
 
 @st.fragment
 def display_downloads():
