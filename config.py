@@ -85,25 +85,25 @@ class RWLock:
 
 class DatabaseConfig:
 
-    wcdbmap = "wcmkt2" #master config variable for the database to use
+    wcdbmap = "wcmktnorth2" #master config variable for the database to use
 
     _db_paths = {
-        "wcmkt2": "wcmkt2.db", #production database
-        "sde": "sde_lite.db",
+        "wcmktnorth2": "wcmktnorth2.db", #production database
+        "sde": "sdelite.db",
         "build_cost": "buildcost.db",
         "wcmkt3": "wcmkt3.db" #testing db
 
     }
 
     _db_turso_urls = {
-        "wcmkt2_turso": st.secrets.wcmkt2_turso.url,
+        "wcmktnorth2_turso": st.secrets.wcmktnorth2_turso.url,
         "sde_turso": st.secrets.sde_lite_turso.url,
         "build_cost_turso": st.secrets.buildcost_turso.url,
         "wcmkt3_turso": st.secrets.wcmkt3_turso.url,
     }
 
     _db_turso_auth_tokens = {
-        "wcmkt2_turso": st.secrets.wcmkt2_turso.token,
+        "wcmktnorth2_turso": st.secrets.wcmktnorth2_turso.token,
         "sde_turso": st.secrets.sde_lite_turso.token,
         "build_cost_turso": st.secrets.buildcost_turso.token,
         "wcmkt3_turso": st.secrets.wcmkt3_turso.token,
@@ -273,8 +273,17 @@ class DatabaseConfig:
                 result = conn.execute(text("PRAGMA integrity_check")).fetchone()
                 logger.debug(f"integrity_check() result: {result}")
             status = str(result[0]).lower() if result and result[0] is not None else ""
-            ok = status == "ok"
+            logger.info(f"integrity_check() status: {status}")
+            if not status:
+                logger.error(f"integrity_check() status is None for {self.alias}")
+                return False
+            
+            harmless = all("never used" in msg for msg in status)
+            ok = status == "ok" or harmless
+            if not ok:
+                logger.warning(f"Integrity check found issues: {status}")
             return ok
+            
         except Exception as e:
             logger.error(f"Integrity check error ({self.alias}): {e}")
             return False

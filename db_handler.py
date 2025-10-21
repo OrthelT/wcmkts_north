@@ -1,6 +1,9 @@
 from httpx import get
 import pandas as pd
 from sqlalchemy import text, bindparam
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 
 import requests
@@ -129,8 +132,10 @@ def get_all_mkt_orders()->pd.DataFrame:
     # Proactive integrity check before reading
     try:
         if not mkt_db.integrity_check():
+            dbpath = mkt_db.path
+            dbalias = mkt_db.alias
 
-            logger.warning("Local DB integrity check failed; attempting resync before read…")
+            logger.warning(f"Local DB integrity check failed for {dbalias} at {dbpath}; attempting resync before read…")
             mkt_db.sync()
     except Exception as e:
         logger.error(f"Pre-read sync attempt failed: {e}")
@@ -442,4 +447,16 @@ def get_chart_table_data()->pd.DataFrame:
     return df
 
 if __name__ == "__main__":
-    get_market_history(1296)
+    pass
+        # from datetime import datetime, timezone
+        # df = pd.read_csv("wc_northern_supply_targets.csv")
+        # df = df.drop(columns=['group'])
+        # df = df.drop(columns=['created_at'])
+        # df['created_at'] = datetime.now().astimezone(timezone.utc)
+
+        # db = DatabaseConfig("wcmkt")
+        # engine = db.remote_engine
+        # with engine.connect() as conn:
+        #     df.to_sql('ship_targets', conn, if_exists='replace', index=False)
+
+    

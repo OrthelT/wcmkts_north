@@ -151,25 +151,37 @@ def create_fit_df()->pd.DataFrame:
 def get_all_fit_data()->pd.DataFrame:
     """Create a dataframe with all fit information"""
     logger.info("Getting fit info from doctrines table")
-    query = "SELECT * FROM doctrines"
 
-    def _read_all():
+    # Get fit_ids from ship_targets
+    query1 = "SELECT * FROM ship_targets"
+    try:
         with mktdb.local_access():
             with mktdb.engine.connect() as conn:
-                return pd.read_sql_query(query, conn)
-
-    try:
-        df = _read_all()
+                targets_df = pd.read_sql_query(query1, conn)
+        fit_ids = targets_df['fit_id'].tolist()
     except Exception as e:
         logger.error(f"Failed to get fit data: {str(e)}")
-        try:
-            mktdb.sync()
-            df = _read_all()
-        except Exception as e2:
-            logger.error(f"Failed to get fit data after sync: {str(e2)}")
-            raise
+        return pd.DataFrame()
 
-    return df
+    # Get doctrine data for those fit_ids
+    if not fit_ids:
+        logger.warning("No fit_ids found in ship_targets")
+        return pd.DataFrame()
+
+    # Create placeholder string for IN clause
+    placeholders = ','.join(['?'] * len(fit_ids))
+    query2 = f"SELECT * FROM doctrines WHERE fit_id IN ({placeholders})"
+
+    try:
+        with mktdb.local_access():
+            with mktdb.engine.connect() as conn:
+                df = pd.read_sql_query(query2, conn, params=tuple(fit_ids))
+        return df
+    except Exception as e:
+        logger.error(f"Failed to get doctrine data: {str(e)}")
+        return pd.DataFrame()
 
 if __name__ == "__main__":
-    pass
+    df = get_all_fit_data()
+    print(df.head())
+    print(df.dtypes)
