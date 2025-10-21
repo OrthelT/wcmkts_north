@@ -499,7 +499,7 @@ def render_headers():
         st.image(wclogo, width=125)
     with col2:
         st.title("Winter Coalition Northern Supply")
-        st.text("Market Stats for B-9 Staging")
+        st.text("Market Stats for B-9C24-Staging")
 
 @st.fragment
 def display_downloads():
