@@ -42,8 +42,6 @@ coverage.xml
 dialect.py
 
 # Streamlit secrets
-.streamlit/
-# Streamlit secrets
 .streamlit/secrets.toml
 *.log
 experimental.py
