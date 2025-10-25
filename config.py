@@ -456,9 +456,13 @@ class DatabaseConfig:
         """
         Read database information from the local database
         """
-        with open(f"{self.path}-info", "r") as f:
-            data = f.read()
-            return data
+        try:
+            with open(f"{self.path}-info", "r") as f:
+                data = f.read()
+                return data
+        except FileNotFoundError:
+            logger.info("DB does not exist, syncing")
+            return None
 
 if __name__ == "__main__":
     pass

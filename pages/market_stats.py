@@ -307,7 +307,7 @@ def check_db():
 
         if db.validate_sync():
             logger.info("Local database synced and validated🟢")
-            update_wcmkt_state()
+            update_wcmkt_state() 
         else:
             logger.info("Local database synced but validation failed❌")
     else:
