@@ -324,12 +324,16 @@ def manual_db_check():
     logger.info(f"manual_db_check() status: {status}, remote_last_update: {remote_last_update}, local_last_update: {local_last_update}")
     if status:
         st.toast(f"Database is synced, remote last update: {remote_last_update}, local last update: {local_last_update}", icon="✅")
+        logger.info(f"Database metadata: {DatabaseConfig("wcmkt").read_dbinfo()}")
+        logger.info("-"*40)
     else:
         st.toast(f"syncing database, remote last update: {remote_last_update}, local last update: {local_last_update}", icon="🕧")
         db = DatabaseConfig("wcmkt")
         db.sync()
         st.toast("Database synced", icon="✅")
         check_db()
+        logger.info(f"Database metadata: {DatabaseConfig("wcmkt").read_dbinfo()}")
+        logger.info("-"*40)
 
 # Run this once every 600 seconds (10 minutes)
 def maybe_run_check():
