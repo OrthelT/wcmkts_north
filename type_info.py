@@ -3,42 +3,28 @@ from sqlalchemy.orm import Session
 import os
 import requests
 from logging_config import setup_logging
+import pandas as pd
 
 logger = setup_logging(__name__)
 
+sde_db_path = "sdelite.db"
+sde_db_url = f"sqlite+libsql:///sdelite.db"
+sde_db_engine = create_engine(sde_db_url)
+
 def get_type_name(type_id: int) -> str:
     # Prefer sde_lite.db; fall back to sde.db if present
-    if os.path.exists("sde_lite.db"):
-        sde = "sqlite+libsql:///sde_lite.db"
-    else:
-        logger.error("No SDE database found (expected sde_lite.db)")
+    stmt  = text("SELECT typeName FROM invTypes as it WHERE it.typeID = :type_id")
+    df = pd.read_sql_query(stmt, sde_db_engine, params={"type_id": type_id})
+    if df.empty:
         return None
-    sdee_engine = create_engine(sde)
-    with Session(bind=sdee_engine) as session:
-        try:
-            result = session.execute(text("SELECT typeName FROM invTypes as it WHERE it.typeID = :type_id"), {"type_id": type_id})
-            row = result.fetchone()
-            type_name = row[0] if row is not None else None
-            return type_name
-        except Exception as e:
-            logger.error(f"Error getting type name for type_id={type_id}: {e}")
-            return None
+    return df['typeName'].iloc[0]
+
 def get_type_id_from_sde(type_name: str) -> int:
-    if os.path.exists("sde_lite.db"):
-        sde = "sqlite+libsql:///sde_lite.db"
-    else:
-        logger.error("No SDE database found (expected sde_lite.db)")
+    stmt = text("SELECT typeID FROM invTypes as it WHERE it.typeName = :type_name")
+    df = pd.read_sql_query(stmt, sde_db_engine, params={"type_name": type_name})
+    if df.empty:
         return None
-    sdee_engine = create_engine(sde)
-    with Session(bind=sdee_engine) as session:
-        try:
-            result = session.execute(text("SELECT typeID FROM invTypes as it WHERE it.typeName = :type_name"), {"type_name": type_name})
-            row = result.fetchone()
-            type_id = row[0] if row is not None else None
-            return type_id
-        except Exception as e:
-            logger.error(f"Error getting type id for type_name={type_name}: {e}")
-            return None
+    return df['typeID'].iloc[0]
 
 def get_type_id_from_fuzzworks(type_name: str) -> int:
     url = f"https://www.fuzzwork.co.uk/api/typeid.php?typename={type_name}"
