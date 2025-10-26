@@ -169,7 +169,6 @@ def get_module_stock_list(module_names: list):
         #with the session state variables, we can now return the lists by saving to the session state variables, we
         #won't need to run the query again
 
-@st.cache_data(ttl=600, show_spinner="Loading cached ship stock list...")
 def get_ship_stock_list(ship_names: list):
     if not st.session_state.get('ship_list_state'):
         st.session_state.ship_list_state = {}
@@ -211,6 +210,7 @@ def get_ship_stock_list(ship_names: list):
 
             st.session_state.ship_list_state[ship] = ship_info
             st.session_state.csv_ship_list_state[ship] = csv_ship_info
+
 @st.fragment
 def fitting_download_button():
     data = get_all_fit_data()
@@ -260,6 +260,41 @@ def get_tgt_from_fit_summary(fit_summary: pd.DataFrame, fit_id: int) -> int:
     return fit_summary[fit_summary['fit_id'] == fit_id]['target'].iloc[0]
 
 def main():
+    # Handle clearing of checkbox states if requested
+    # This must happen BEFORE any widgets are created
+    if 'selected_ships' not in st.session_state:
+        st.session_state.selected_ships = []
+    if 'selected_modules' not in st.session_state:
+        st.session_state.selected_modules = []
+    if 'ship_list_state' not in st.session_state:
+        st.session_state.ship_list_state = {}
+    if 'csv_ship_list_state' not in st.session_state:
+        st.session_state.csv_ship_list_state = {}
+    if 'module_list_state' not in st.session_state:
+        st.session_state.module_list_state = {}
+    if 'csv_module_list_state' not in st.session_state:
+        st.session_state.csv_module_list_state = {}
+
+    if st.session_state.get('clear_ship_checkboxes', False):
+        # Delete all ship checkbox keys that match the pattern
+        keys_to_delete = [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith('ship_') 
+                        and k not in ['selected_ships', 'ship_list_state', 'csv_ship_list_state']]
+        for key in keys_to_delete:
+            st.session_state[key] = False
+        st.session_state.clear_ship_checkboxes = False
+
+    if st.session_state.get('clear_module_checkboxes', False):
+        # Delete all module checkbox keys (they don't start with 'ship_' and are numeric pattern)
+        keys_to_delete = [k for k in st.session_state.keys()
+                         if isinstance(k, str) and '_' in k and not k.startswith('ship_')
+                         and k not in ['selected_modules', 'module_list_state', 'csv_module_list_state',
+                                      'selected_ships', 'ship_list_state', 'csv_ship_list_state',
+                                      'displayed_ships', 'ds_target_multiplier', 'clear_ship_checkboxes',
+                                      'clear_module_checkboxes']]
+        for key in keys_to_delete:
+            st.session_state[key] = False
+        st.session_state.clear_module_checkboxes = False
+
     # App title and logo
     col1, col2, col3 = st.columns([0.2, 0.5, 0.3])
     with col1:
@@ -340,6 +375,10 @@ def main():
     # Apply ship group filter
     if selected_group != "All":
         filtered_df = filtered_df[filtered_df['ship_group'] == selected_group]
+    
+    st.sidebar.checkbox("Show low stock hulls only", value=False, key="show_low_stock_hulls_only")
+    if st.session_state.get('show_low_stock_hulls_only', False):
+        filtered_df = filtered_df[filtered_df['hulls'] <= filtered_df['target'] * 0.9]
 
     # Update the displayed ships based on filters
     st.session_state.displayed_ships = filtered_df['ship_name'].unique().tolist()
@@ -398,12 +437,17 @@ def main():
                 with ship_cols[0]:
                     # Add checkbox next to ship name with unique key using fit_id and ship_name
                     unique_key = f"ship_{row['fit_id']}_{row['ship_name']}"
-                    ship_selected = st.checkbox("x", key=unique_key,
-                                             value=row['ship_name'] in st.session_state.selected_ships, label_visibility="hidden")
-                    if ship_selected and row['ship_name'] not in st.session_state.selected_ships:
+
+                    if row['ship_name'] in st.session_state.selected_ships:
+                        st.session_state[unique_key] = True
+
+                    st.checkbox("x", key=unique_key,
+                                value=st.session_state.get(unique_key, False), label_visibility="hidden")
+                    if st.session_state.get(unique_key, False) == True and row['ship_name'] not in st.session_state.selected_ships:
                         st.session_state.selected_ships.append(row['ship_name'])
-                    elif not ship_selected and row['ship_name'] in st.session_state.selected_ships:
-                        st.session_state.selected_ships.remove(row['ship_name'])
+                        logger.info(f"Added {row['ship_name']} to selected ships")
+                    elif st.session_state.get(unique_key, False) == True and row['ship_name'] in st.session_state.selected_ships:
+                        logger.info(f"Ship {row['ship_name']} already in selected ships")
 
                 with ship_cols[1]:
                     st.markdown(f"### {row['ship_name']}")
@@ -480,12 +524,18 @@ def main():
 
                     col_a, col_b = st.columns([0.1, 0.9])
                     with col_a:
-                        is_selected = st.checkbox("1", key=module_key, label_visibility="hidden",
-                                               value=display_key in st.session_state.selected_modules)
-                        if is_selected and display_key not in st.session_state.selected_modules:
+
+                        if display_key in st.session_state.selected_modules:
+                            st.session_state[module_key] = True
+
+                        st.checkbox("1", key=module_key, label_visibility="hidden",
+                                        value=st.session_state.get(module_key, False))
+                        if st.session_state.get(module_key, False) == True and display_key not in st.session_state.selected_modules:
+                            logger.info(f"Adding {display_key}-{module_key} to selected modules")
                             st.session_state.selected_modules.append(display_key)
-                        elif not is_selected and display_key in st.session_state.selected_modules:
-                            st.session_state.selected_modules.remove(display_key)
+                        elif st.session_state.get(module_key, False) == True and display_key in st.session_state.selected_modules:
+                            logger.info(f"Module {display_key}-{module_key} already in selected modules")
+
 
                     with col_b:
                         if int(module_qty) <= row['target'] * 0.2:
@@ -510,15 +560,17 @@ def main():
     ship_col1, ship_col2 = st.sidebar.columns(2)
 
     # Add "Select All Ships" button
-    if ship_col1.button("📋 Select All Ships", width='content'):
+    if ship_col1.button("📋 Select All Ships", width='content', help="select all ships that are currently visible based on filters"):
         st.session_state.selected_ships = st.session_state.displayed_ships.copy()
         st.rerun()
 
     # Add "Clear Ship Selection" button
-    if ship_col2.button("🗑️ Clear Ships", width='content'):
+    if ship_col2.button("🗑️ Clear Ships", width='content', help="clear all selected ships"):
         st.session_state.selected_ships = []
         st.session_state.ship_list_state = {}
         st.session_state.csv_ship_list_state = {}
+        st.session_state.clear_ship_checkboxes = True
+
         logger.info("Cleared ship selection and session state")
         logger.info(f"Session state ship list: {st.session_state.ship_list_state}")
         logger.info(f"Session state csv ship list: {st.session_state.csv_ship_list_state}")
@@ -530,10 +582,11 @@ def main():
     col1, col2 = st.sidebar.columns(2)
 
     # Add "Select All Modules" functionality
-    if col1.button("📋 Select All Modules", width='content'):
+    if col1.button("📋 Select All Modules", width='content', help="select all modules that are currently visible based on filters"):
         # Create a list to collect all module keys that are currently visible based on filters
         visible_modules = []
         low_stock_modules = []
+        selected_module_keys = []
         for _, group_data in grouped_fits:
             for _, row in group_data.iterrows():
                 # Only include ships that are displayed (match filters)
@@ -543,7 +596,7 @@ def main():
                 for module in row['lowest_modules']:
                     module_qty = module.split("(")[1].split(")")[0]
                     module_name = module.split(" (")[0]
-                    display_key = f"{module_name}_{module_qty}"
+                    display_key = f"{module_name}"
 
                     # Determine module status for filtering
                     if selected_module_status == "All Low Stock":
@@ -573,10 +626,12 @@ def main():
         st.rerun()
 
     # Clear module selection button
-    if col2.button("🗑️ Clear Modules", width='content'):
+    if col2.button("🗑️ Clear Modules", width='content', help="clear all selected modules"):
         st.session_state.selected_modules = []
         st.session_state.module_list_state = {}
         st.session_state.csv_module_list_state = {}
+        st.session_state.clear_module_checkboxes = True
+
         logger.info("Cleared module selection and session state")
         logger.info(f"Session state module list: {st.session_state.module_list_state}")
         logger.info(f"Session state csv module list: {st.session_state.csv_module_list_state}")
@@ -585,23 +640,26 @@ def main():
 
     # Display selected ships if any
     if st.session_state.selected_ships:
+        logger.info(f"Selected ships: {st.session_state.selected_ships}")
         st.sidebar.markdown("---")
         st.sidebar.markdown("### Selected Ships:")
         num_selected_ships = len(st.session_state.selected_ships)
+        logger.info(f"Number of selected ships: {num_selected_ships}")
         ship_container_height = 100 if num_selected_ships <= 2 else num_selected_ships * 50
 
         # Create a scrollable container for selected ships
         with st.sidebar.container(height=ship_container_height):
             get_ship_stock_list(st.session_state.selected_ships)
-            ship_list = [st.session_state.ship_list_state[ship] for ship in st.session_state.selected_ships]
-            csv_ship_list = [st.session_state.csv_ship_list_state[ship] for ship in st.session_state.selected_ships]
+            logger.info(f"Ship list state: {st.session_state.ship_list_state}")
+            ship_list = [st.session_state.ship_list_state[ship] for ship in st.session_state.ship_list_state.keys()]
+            csv_ship_list = [st.session_state.csv_ship_list_state[ship] for ship in st.session_state.csv_ship_list_state.keys()]
             for ship in ship_list:
                 st.text(ship)
     # Display selected modules if any
     if st.session_state.selected_modules:
         # Get module names
-        module_names = [display_key.rsplit("_", 1)[0] for display_key in st.session_state.selected_modules]
-        module_names = list(set(module_names))
+        module_names = list(set(st.session_state.selected_modules))
+
         # Query market stock (total_stock) for these modules
         get_module_stock_list(module_names)
 
@@ -640,8 +698,7 @@ def main():
 
         if st.session_state.selected_modules:
             # Get module names
-            module_names = [display_key.rsplit("_", 1)[0] for display_key in st.session_state.selected_modules]
-            module_names = list(set(module_names))
+            module_names = list(set(st.session_state.selected_modules))
 
             export_text += "MODULES:\n" + "\n".join(module_list)
 
