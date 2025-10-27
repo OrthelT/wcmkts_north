@@ -383,6 +383,58 @@ async def get_costs_async(job: JobQuery) -> tuple[dict, dict]:
 
     return results, status_log
 
+def apply_additional_costs(results: dict, bpc_cost_per_run: int, shipping_cost_per_m3: int, runs: int) -> dict:
+    """
+    Apply additional costs (BPC and shipping) to the build cost results.
+
+    Args:
+        results: Dictionary of build cost results from get_costs()
+        bpc_cost_per_run: Cost of BPC per run
+        shipping_cost_per_m3: Cost to ship materials per cubic meter
+        runs: Number of runs
+
+    Returns:
+        Updated results dictionary with additional costs included
+    """
+    if bpc_cost_per_run == 0 and shipping_cost_per_m3 == 0:
+        return results
+
+    updated_results = {}
+
+    for structure_name, structure_data in results.items():
+        # Create a copy of the structure data
+        updated_data = structure_data.copy()
+
+        # Calculate total material volume from materials data
+        total_material_volume = 0
+        if "materials" in structure_data:
+            for material_id, material_info in structure_data["materials"].items():
+                total_material_volume += material_info.get("volume", 0)
+
+        # Calculate additional costs
+        total_bpc_cost = bpc_cost_per_run * runs if bpc_cost_per_run > 0 else 0
+        total_shipping_cost = shipping_cost_per_m3 * total_material_volume if shipping_cost_per_m3 > 0 else 0
+        total_additional_cost = total_bpc_cost + total_shipping_cost
+
+        units = structure_data["units"]
+        additional_cost_per_unit = total_additional_cost / units if units > 0 else 0
+
+        # Update costs
+        updated_data["bpc_cost"] = total_bpc_cost
+        updated_data["shipping_cost"] = total_shipping_cost
+        updated_data["additional_cost"] = total_additional_cost
+        updated_data["additional_cost_per_unit"] = additional_cost_per_unit
+        updated_data["material_volume"] = total_material_volume
+
+        # Update total costs to include additional costs
+        updated_data["total_cost"] = structure_data["total_cost"] + total_additional_cost
+        updated_data["total_cost_per_unit"] = structure_data["total_cost_per_unit"] + additional_cost_per_unit
+
+        updated_results[structure_name] = updated_data
+
+    return updated_results
+
+
 def display_log_status(status: dict):
 
     logger.info("Status Report:")
@@ -490,11 +542,19 @@ def display_data(df: pd.DataFrame, selected_structure: str | None = None):
         "total_cost_per_unit",
         "total_material_cost",
         "total_job_cost",
+    ]
+
+    # Add additional cost columns if present
+    if "additional_cost" in df.columns:
+        col_order.extend(["additional_cost", "bpc_cost", "shipping_cost", "material_volume"])
+
+    col_order.extend([
         "facility_tax",
         "scc_surcharge",
         "system_cost_index",
         "structure_rigs",
-    ]
+    ])
+
     if selected_structure:
         col_order.insert(2, "comparison_cost")
         col_order.insert(3, "comparison_cost_per_unit")
@@ -530,6 +590,30 @@ def display_data(df: pd.DataFrame, selected_structure: str | None = None):
             "total job cost",
             help="Total job cost, which includes the facility tax, SCC surcharge, and system cost index",
             format="compact",
+        ),
+        "additional_cost": st.column_config.NumberColumn(
+            "additional cost",
+            help="Total additional costs (BPC + shipping)",
+            format="compact",
+            width="small"
+        ),
+        "bpc_cost": st.column_config.NumberColumn(
+            "BPC cost",
+            help="Blueprint Copy cost",
+            format="compact",
+            width="small"
+        ),
+        "shipping_cost": st.column_config.NumberColumn(
+            "shipping cost",
+            help="Shipping cost based on material volume",
+            format="compact",
+            width="small"
+        ),
+        "material_volume": st.column_config.NumberColumn(
+            "material vol (m³)",
+            help="Total volume of materials in cubic meters",
+            format="localized",
+            width="small"
         ),
         "facility_tax": st.column_config.NumberColumn(
             "facility tax", help="Facility tax cost", format="compact", width="small"
@@ -638,6 +722,10 @@ def initialise_session_state():
         st.session_state.async_mode = False
     if "selected_regions" not in st.session_state:
         st.session_state.selected_regions = ["Vale of the Silent", "Pure Blind"]
+    if "bpc_cost_per_run" not in st.session_state:
+        st.session_state.bpc_cost_per_run = 0
+    if "shipping_cost_per_m3" not in st.session_state:
+        st.session_state.shipping_cost_per_m3 = 0
     st.session_state.initialised = True
 
     try:
@@ -946,6 +1034,7 @@ def main():
     te = st.sidebar.number_input("TE", min_value=0, max_value=20, value=0)
 
     st.sidebar.divider()
+    st.sidebar.markdown("### Advanced Options")
 
     price_source = st.sidebar.selectbox(
         "Select a material price source",
@@ -974,7 +1063,7 @@ def main():
     structure_names = [structure.structure for structure in all_structures]
     structure_names = sorted(structure_names)
 
-    with st.sidebar.expander("Select a structure to compare (optional)"):
+    with st.sidebar.expander("Select a structure to compare"):
         selected_structure = st.selectbox(
             "Structures:",
             structure_names,
@@ -982,6 +1071,40 @@ def main():
             placeholder="All Structures",
             help="Select a structure to compare the cost to build versus this structure. This is optional and will default to all structures.",
         )
+
+    # Additional costs section
+    with st.sidebar.expander("Add Additional Costs", expanded=False):
+        st.markdown("Add extra costs to factor into your build calculations (optional):")
+
+        # Get default values safely
+        default_bpc_cost = getattr(st.session_state, 'bpc_cost_per_run', 0)
+        default_shipping_cost = getattr(st.session_state, 'shipping_cost_per_m3', 0)
+
+        bpc_cost_per_run = st.number_input(
+            "BPC Cost (per run)",
+            min_value=0,
+            value=default_bpc_cost,
+            step=1000000,
+            format="%d",
+            help="Cost of the Blueprint Copy per run. This will be divided across all units produced.",
+            key="bpc_cost_input"
+        )
+        st.session_state.bpc_cost_per_run = bpc_cost_per_run
+
+        shipping_cost_per_m3 = st.number_input(
+            "Shipping Cost (per m³)",
+            min_value=0,
+            value=default_shipping_cost,
+            step=100,
+            format="%d",
+            help="Cost to ship materials per cubic meter. Total shipping cost will be calculated based on material volume.",
+            key="shipping_cost_input"
+        )
+        st.session_state.shipping_cost_per_m3 = shipping_cost_per_m3
+
+        # Show preview if any costs are set
+        if bpc_cost_per_run > 0 or shipping_cost_per_m3 > 0:
+            st.info(f"**Active Additional Costs:**\n- BPC: {millify(bpc_cost_per_run, precision=2)} ISK/run\n- Shipping: {millify(shipping_cost_per_m3, precision=2)} ISK/m³")
 
     # Create job parameters for comparison
     current_job_params = {
@@ -993,6 +1116,8 @@ def main():
         "te": te,
         "price_source": st.session_state.price_source,
         "selected_regions": st.session_state.selected_regions,
+        "bpc_cost_per_run": getattr(st.session_state, 'bpc_cost_per_run', 0),
+        "shipping_cost_per_m3": getattr(st.session_state, 'shipping_cost_per_m3', 0),
     }
     logger.info(f"Current job params: {current_job_params}")
     logger.info(
@@ -1032,9 +1157,14 @@ def main():
         st.session_state.button_label = "Calculate"
         logger.info("Parameters not changed")
 
+    if st.session_state.button_label == "Recalculate":
+        button_type = "primary"
+    else:
+        button_type = "secondary"
+
     calculate_clicked = st.sidebar.button(
         st.session_state.button_label,
-        type="primary",
+        type=button_type,
         help="Click to calculate the cost for the selected item.",
     )
 
@@ -1086,6 +1216,14 @@ def main():
         logger.info("=" * 80)
         logger.info("\n")
 
+        # Apply additional costs if any are set
+        results = apply_additional_costs(
+            results,
+            getattr(st.session_state, 'bpc_cost_per_run', 0),
+            getattr(st.session_state, 'shipping_cost_per_m3', 0),
+            runs
+        )
+
         # Cache the results and parameters
         st.session_state.cost_results = results
         st.session_state.current_job_params = current_job_params
@@ -1130,6 +1268,13 @@ def main():
         )
         job_cost_per_unit = job_cost / build_cost_df.loc[low_cost_structure, "units"]
 
+        # Get additional costs if present
+        additional_cost = build_cost_df.loc[low_cost_structure].get("additional_cost", 0)
+        additional_cost_per_unit = build_cost_df.loc[low_cost_structure].get("additional_cost_per_unit", 0)
+        bpc_cost = build_cost_df.loc[low_cost_structure].get("bpc_cost", 0)
+        shipping_cost = build_cost_df.loc[low_cost_structure].get("shipping_cost", 0)
+        material_volume = build_cost_df.loc[low_cost_structure].get("material_volume", 0)
+
         col1, col2 = st.columns([0.2, 0.8])
         with col1:
             if is_valid_image_url(url):
@@ -1149,16 +1294,32 @@ def main():
                     value=f"{millify(low_cost, precision=2)} ISK",
                     help=f"Based on the lowest cost structure: {low_cost_structure}",
                 )
-                st.markdown(
-                    f"**Materials:** {millify(material_cost_per_unit, precision=2)} ISK | **Job cost:** {millify(job_cost_per_unit, precision=2)} ISK"
-                )
+                breakdown_parts = [
+                    f"**Materials:** {millify(material_cost_per_unit, precision=2)} ISK",
+                    f"**Job cost:** {millify(job_cost_per_unit, precision=2)} ISK"
+                ]
+                if additional_cost_per_unit > 0:
+                    breakdown_parts.append(f"**Additional:** {millify(additional_cost_per_unit, precision=2)} ISK")
+                st.markdown(" | ".join(breakdown_parts))
+
             with col2:
                 st.metric(
                     label="Total Build Cost",
                     value=f"{millify(total_cost, precision=2)} ISK",
                 )
-                st.markdown(
-                    f"**Materials:** {millify(material_cost, precision=2)} ISK | **Job cost:** {millify(job_cost, precision=2)} ISK"
+                breakdown_parts = [
+                    f"**Materials:** {millify(material_cost, precision=2)} ISK",
+                    f"**Job cost:** {millify(job_cost, precision=2)} ISK"
+                ]
+                if additional_cost > 0:
+                    breakdown_parts.append(f"**Additional:** {millify(additional_cost, precision=2)} ISK")
+                st.markdown(" | ".join(breakdown_parts))
+
+            # Show additional costs breakdown if present
+            if additional_cost > 0:
+                st.info(
+                    f"**Additional Costs Breakdown:** BPC: {millify(bpc_cost, precision=2)} ISK | "
+                    f"Shipping ({millify(material_volume, precision=2)} m³): {millify(shipping_cost, precision=2)} ISK"
                 )
 
         if vale_price:
