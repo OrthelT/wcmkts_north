@@ -914,17 +914,22 @@ def main():
     index = categories.index("Ship")
 
     # This turns on asynchronous mode, an experimental feature that significantly speeds up the calculation time. This is now enabled by default. Set to False and use synchronous mode if you experience issues.
-    async_mode = st.sidebar.checkbox(
-        "Async Mode",
-        value=True,
-        help="This turns on asynchronous mode, an experimental feature that significantly speeds up the calculation time. This is now enabled by default. Set to False and use synchronous mode if you experience issues.",
-    )
+    # async_mode = st.sidebar.checkbox(
+    #     "Async Mode",
+    #     value=True,
+    #     help="This turns on asynchronous mode, an experimental feature that significantly speeds up the calculation time. This is now enabled by default. Set to False and use synchronous mode if you experience issues.",
+    # )
+    async_mode = True
+    logger.info("Async mode enabled by default")
+
     if async_mode:
         st.session_state.async_mode = True
         logger.info("Async mode enabled")
     else:
         st.session_state.async_mode = False
         logger.info("Async mode disabled")
+
+    st.sidebar.subheader("Build Job Configuration", divider="blue")
 
     # Region filter
     st.sidebar.markdown("**Filter by Region:**")
@@ -1162,18 +1167,19 @@ def main():
     else:
         button_type = "secondary"
 
+    st.sidebar.divider()
     calculate_clicked = st.sidebar.button(
         st.session_state.button_label,
         type=button_type,
         help="Click to calculate the cost for the selected item.",
+        use_container_width=True
     )
-
+    
     if calculate_clicked:
         st.session_state.calculate_clicked = True
         st.session_state.selected_item_for_display = selected_item
 
     if st.session_state.sci_last_modified:
-        st.sidebar.markdown("---")
         st.sidebar.markdown(
             f"*Industry indexes last updated: {st.session_state.sci_last_modified.strftime('%Y-%m-%d %H:%M:%S UTC')}*"
         )
