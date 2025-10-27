@@ -230,7 +230,7 @@ def get_costs_syncronous(job: JobQuery) -> tuple[dict, dict]:
     url_generator = job.yield_urls()
     results = {}
 
-    structures = get_all_structures()
+    structures = get_all_structures(regions=get_selected_regions())
 
     progress_bar = st.progress(
         0, text=f"Fetching data from {len(structures)} structures..."
@@ -317,7 +317,7 @@ async def fetch_one(
         return structure_name, None, str(e)
 
 async def get_costs_async(job: JobQuery) -> tuple[dict, dict]:
-    structures = get_all_structures(unwrap=True)  # list[dict]
+    structures = get_all_structures(unwrap=True, regions=get_selected_regions())  # list[dict]
     url_generator = job.yield_urls()
 
     results = {}
@@ -399,11 +399,16 @@ def display_log_status(status: dict):
 
 @st.cache_data(ttl=3600)
 def get_all_structures(
-    *, unwrap: bool = False
+    *, unwrap: bool = False, regions: list[str] | None = None
 ) -> Sequence[sa.Row[Tuple[Structure]]] | list[dict[str, Any]]:
     engine = sa.create_engine(build_cost_url)
     logger.info("Getting all structures")
-    if st.session_state.super:
+    t0 = time.perf_counter()
+
+    # Check if super mode is enabled (default to False if not initialized)
+    super_mode = getattr(st.session_state, 'super', False)
+
+    if super_mode:
         logger.info("Super mode enabled")
         stmt = sa.select(Structure).where(Structure.structure_id == super_shipyard_id)
     else:
@@ -415,18 +420,30 @@ def get_all_structures(
             .filter(Structure.structure_type_id.in_(valid_structures))
         )
 
+    # Apply region filter if regions are specified
+    if regions:
+        logger.info(f"Filtering by regions: {regions}")
+        stmt = stmt.filter(Structure.region.in_(regions))
+
     with engine.connect() as conn:
         res = conn.execute(stmt)
         rows = res.fetchall()
-
+        t1 = time.perf_counter()
+        elapsed_time = round((t1 - t0) * 1000, 2)
+        logger.info(f"TIME get_all_structures() = {elapsed_time} ms")
         if unwrap:
             return [r._mapping for r in rows]
         else:
             return rows
 
 
+def get_selected_regions() -> list[str] | None:
+    """Safely get selected regions from session state, returning None if not initialized."""
+    return getattr(st.session_state, 'selected_regions', None)
+
+
 def yield_structure():
-    structures = get_all_structures()
+    structures = get_all_structures(regions=get_selected_regions())
     for structure in structures:
         yield structure
 
@@ -619,6 +636,8 @@ def initialise_session_state():
         st.session_state.super = False
     if "async_mode" not in st.session_state:
         st.session_state.async_mode = False
+    if "selected_regions" not in st.session_state:
+        st.session_state.selected_regions = ["Vale of the Silent", "Pure Blind"]
     st.session_state.initialised = True
 
     try:
@@ -819,6 +838,29 @@ def main():
         st.session_state.async_mode = False
         logger.info("Async mode disabled")
 
+    # Region filter
+    st.sidebar.markdown("**Filter by Region:**")
+    # Get default value safely - use both regions if not initialized
+    default_regions = getattr(st.session_state, 'selected_regions', ["Vale of the Silent", "Pure Blind"])
+
+    selected_regions = st.sidebar.pills(
+        "Select Regions",
+        options=["Vale of the Silent", "Pure Blind"],
+        selection_mode="multi",
+        default=default_regions,
+        label_visibility="collapsed",
+        help="Select one or more regions to filter structures. Default shows all regions.",
+    )
+
+    # Update session state with selected regions
+    if selected_regions:
+        st.session_state.selected_regions = selected_regions
+        logger.info(f"Selected regions: {selected_regions}")
+    else:
+        # If no regions selected, show all by default
+        st.session_state.selected_regions = ["Vale of the Silent", "Pure Blind"]
+        logger.info("No regions selected, showing all")
+
     selected_category = st.sidebar.selectbox(
         "Select a category",
         categories,
@@ -928,7 +970,7 @@ def main():
     url = f"https://images.evetech.net/types/{type_id}/render?size=256"
     alt_url = f"https://images.evetech.net/types/{type_id}/icon"
 
-    all_structures = get_all_structures()
+    all_structures = get_all_structures(regions=get_selected_regions())
     structure_names = [structure.structure for structure in all_structures]
     structure_names = sorted(structure_names)
 
@@ -950,6 +992,7 @@ def main():
         "me": me,
         "te": te,
         "price_source": st.session_state.price_source,
+        "selected_regions": st.session_state.selected_regions,
     }
     logger.info(f"Current job params: {current_job_params}")
     logger.info(
@@ -964,13 +1007,20 @@ def main():
     logger.info(f"Params changed: {params_changed}")
     if params_changed:
         st.session_state.button_label = "Recalculate"
+
+        # Check if regions changed - if so, clear the structure cache
+        if (st.session_state.current_job_params is not None and
+            st.session_state.current_job_params.get("selected_regions") != current_job_params["selected_regions"]):
+            logger.info("Regions changed, clearing structure cache")
+            get_all_structures.clear()
+
         if current_job_params["group_id"] in [30, 659]:
             st.session_state.super = True
         else:
             if st.session_state.super:
                 get_all_structures.clear()
                 st.session_state.super = False
-                structure_names = get_all_structures()
+                structure_names = get_all_structures(regions=get_selected_regions())
                 structure_names = [structure.structure for structure in structure_names]
                 structure_names = sorted(structure_names)
         logger.info(f"Params changed, Super: {st.session_state.super}")
