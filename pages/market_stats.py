@@ -578,6 +578,10 @@ def display_history_metrics(history_df):
 def main():
     if 'db_init_time' not in st.session_state:
         initialize_main_function()
+    elif not isinstance(st.session_state.db_init_time, datetime):
+        # Handle case where db_init_time was incorrectly set to a bool or other type
+        logger.warning(f"db_init_time has incorrect type: {type(st.session_state.db_init_time)}, reinitializing")
+        initialize_main_function()
     elif datetime.now() - st.session_state.db_init_time > timedelta(hours=1):
         initialize_main_function()
 
