@@ -117,7 +117,6 @@ def wrap_top_n_items(df_7days: pd.DataFrame, df_30days: pd.DataFrame) -> pd.Data
     top_n_items = top_n_items_fragment()
     return top_n_items
 
-
 def calculate_30day_metrics(selected_category=None, selected_item_id=None)->tuple:
     """
     Calculate average daily sales and total daily ISK value for the last 30 days
@@ -776,7 +775,7 @@ def render_30day_metrics_ui():
 
 def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_count, sell_total_value, fit_df, fits_on_mkt, cat_id):
     """
-    Render the current market status metrics section
+    Render the current market metrics section
 
     Args:
         sell_data: DataFrame with current sell orders
@@ -788,7 +787,7 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
         fits_on_mkt: Number of fits available on market
         cat_id: Category ID of the selected item
     """
-    st.subheader("Current Market Status", divider="grey")
+    st.subheader("Current Market Metrics", divider="grey")
 
     # Display metrics - conditionally show col1 based on selected_item
     if selected_item:
@@ -832,6 +831,8 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
             if st.session_state.jita_price is not None:
                 display_jita_price = millify.millify(st.session_state.jita_price, precision=2)
                 st.metric("Jita Price", f"{display_jita_price} ISK")
+            
+
 
     with col2:
         if not sell_data.empty:
@@ -857,6 +858,25 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
             st.metric("Total Sell Orders", f"{display_sell_order_count}")
         else:
             st.metric("Total Sell Orders", "0")
+
+        if st.session_state.selected_item_id is not None:
+            
+            avg_vol = get_avg_volume(st.session_state.selected_item_id)
+
+            if st.session_state.current_price is not None and st.session_state.jita_price is not None:
+                logger.info(f"Current price: {st.session_state.current_price}, Jita price: {st.session_state.jita_price}, Avg volume: {avg_vol}")
+                try:
+                    # Ensure all values are numeric
+                    current_price = float(st.session_state.current_price)
+                    jita_price = float(st.session_state.jita_price)
+                    avg_vol = float(avg_vol)
+                    cap_util_ratio = calculate_capital_utility_ratio(current_price, jita_price, avg_vol)
+                    st.metric("Capital Utility Ratio", f"{cap_util_ratio:.2f}")
+                except (ValueError, TypeError) as e:
+                    logger.error(f"Error calculating capital utility ratio: {e}")
+                    pass
+        else:
+            pass
 
     with col4:
         if fit_df is not None and fit_df.empty is False and fits_on_mkt is not None:
@@ -884,6 +904,22 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
 
         else:
             pass
+
+def calculate_capital_utility_ratio(staging_price: float, jita_price: float, avg_daily_vol: float)->float:
+    """
+    Calculate the capital utility ratio
+    """
+    capital_utility_ratio = ((staging_price - jita_price) / jita_price) * avg_daily_vol
+    return capital_utility_ratio
+
+def get_avg_volume(type_id: int)->float:
+    """
+    Get the 30-day average volume of the sell data
+    """
+    mkt_db = DatabaseConfig("wcmkt")
+    history_query = text("SELECT avg_volume FROM marketstats WHERE type_id = :type_id")
+    avg_vol = read_df(mkt_db, history_query, {'type_id': str(type_id)})['avg_volume'].iloc[0]
+    return avg_vol
 
 if __name__ == "__main__":
     pass
