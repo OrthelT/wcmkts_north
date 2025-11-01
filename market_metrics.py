@@ -860,21 +860,18 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
             st.metric("Total Sell Orders", "0")
 
         if st.session_state.selected_item_id is not None:
-            
-            avg_vol = get_avg_volume(st.session_state.selected_item_id)
-
-            if st.session_state.current_price is not None and st.session_state.jita_price is not None:
-                logger.info(f"Current price: {st.session_state.current_price}, Jita price: {st.session_state.jita_price}, Avg volume: {avg_vol}")
-                try:
-                    # Ensure all values are numeric
-                    current_price = float(st.session_state.current_price)
-                    jita_price = float(st.session_state.jita_price)
-                    avg_vol = float(avg_vol)
-                    cap_util_ratio = calculate_capital_utility_ratio(current_price, jita_price, avg_vol)
-                    st.metric("Capital Utility Ratio", f"{cap_util_ratio:.2f}")
-                except (ValueError, TypeError) as e:
-                    logger.error(f"Error calculating capital utility ratio: {e}")
-                    pass
+            avg_daily_vol = get_avg_volume(st.session_state.selected_item_id)
+            try:
+                logger.info(f"Current price: {st.session_state.current_price}, Jita price: {st.session_state.jita_price}, Avg volume: {avg_daily_vol}")
+                # Ensure all values are numeric
+                current_price = float(st.session_state.current_price)
+                jita_price = float(st.session_state.jita_price)
+                avg_vol = float(avg_daily_vol)
+                cap_util_ratio = calculate_capital_utility_ratio(current_price, jita_price, avg_daily_vol)
+                st.metric("Capital Utility Ratio", f"{cap_util_ratio:.2f}")
+            except (ValueError, TypeError) as e:
+                logger.error(f"Error calculating capital utility ratio: {e}")
+                pass
         else:
             pass
 
