@@ -814,14 +814,14 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
                     st.session_state.current_price = min_price
                     display_min_price = millify.millify(min_price, precision=2)
                     if delta_price is not None:
-                        st.metric("4-HWWF Sell Price", f"{display_min_price} ISK", delta=f"{round(100*delta_price, 1)}% Jita")
+                        st.metric("B-9C24 Sell Price", f"{display_min_price} ISK", delta=f"{round(100*delta_price, 1)}% Jita")
                     else:
-                        st.metric("4-HWWF Sell Price", f"{display_min_price} ISK")
+                        st.metric("B-9C24 Sell Price", f"{display_min_price} ISK")
 
                 elif selected_item and st.session_state.selected_item_id is not None:
                     try:
                         display_min_price = millify.millify(get_price_from_mkt_orders(st.session_state.selected_item_id), precision=2)
-                        st.metric("4-HWWF Sell Price", f"{display_min_price} ISK")
+                        st.metric("B-9C24 Sell Price", f"{display_min_price} ISK")
 
                     except Exception:
                         pass
