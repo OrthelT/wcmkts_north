@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 import millify
 from doctrines import get_target_from_fit_id
 import numpy as np
+from type_info import TypeInfo
+
 
 logger = setup_logging(__name__)
 
@@ -143,7 +145,7 @@ def calculate_30day_metrics(selected_category=None, selected_item_id=None)->tupl
             df = get_all_market_history()
 
         if df.empty:
-            return 0, 0, 0, 0, 0, 0
+            return 0, 0, 0, 0, 0, 0, 0, 0
 
         # Convert date column to datetime
         df['date'] = pd.to_datetime(df['date'])
@@ -155,7 +157,7 @@ def calculate_30day_metrics(selected_category=None, selected_item_id=None)->tupl
         df_7days = df[df['date'] >= week_cutoff_date].copy()
 
         if df_30days.empty:
-            return 0, 0, 0, 0, 0, 0
+            return 0, 0, 0, 0, 0, 0, 0, 0
 
         # Calculate daily metrics
         df_30days['daily_isk_volume'] = df_30days['average'] * df_30days['volume']
@@ -173,22 +175,31 @@ def calculate_30day_metrics(selected_category=None, selected_item_id=None)->tupl
         }).reset_index()
 
         # Calculate averages
-        avg_daily_volume = daily_metrics_30days['volume'].mean()
-        avg_daily_isk_value = daily_metrics_30days['daily_isk_volume'].mean()
+        avg_daily_volume_30days = daily_metrics_30days['volume'].mean()
+        avg_daily_isk_value_30days = daily_metrics_30days['daily_isk_volume'].mean()
 
         avg_daily_volume_7days = daily_metrics_7days['volume'].mean()
         avg_daily_isk_value_7days = daily_metrics_7days['daily_isk_volume'].mean()
 
-
-        vol_delta = (avg_daily_volume_7days - avg_daily_volume) / avg_daily_volume if avg_daily_volume > 0 else 0
-        isk_delta = (avg_daily_isk_value_7days - avg_daily_isk_value) / avg_daily_isk_value if avg_daily_isk_value > 0 else 0
+        logger.info(f"""
+        Avg Daily Volume 30days: {millify.millify(avg_daily_volume_30days, precision=0)}
+        Avg Daily ISK Value 30days: {millify.millify(avg_daily_isk_value_30days, precision=2)} ISK
+        Avg Daily Volume 7days: {millify.millify(avg_daily_volume_7days, precision=0)}
+        Avg Daily ISK Value 7days: {millify.millify(avg_daily_isk_value_7days, precision=2)} ISK
+        """)
+        vol_delta = (avg_daily_volume_7days - avg_daily_volume_30days) / avg_daily_volume_30days if avg_daily_volume_30days > 0 else 0
+        isk_delta = (avg_daily_isk_value_7days - avg_daily_isk_value_30days) / avg_daily_isk_value_30days if avg_daily_isk_value_30days > 0 else 0
         vol_delta = round(vol_delta * 100, 1)
         isk_delta = round(isk_delta * 100, 1)
+        logger.info(f"""
+        Vol Delta: {vol_delta}%
+        ISK Delta: {isk_delta}%
+        """)
 
-        return avg_daily_volume, avg_daily_isk_value, vol_delta, isk_delta, df_30days, df_7days
+        return avg_daily_volume_30days, avg_daily_isk_value_30days, vol_delta, isk_delta, df_30days, df_7days, avg_daily_volume_7days, avg_daily_isk_value_7days
     except Exception as e:
         logger.error(f"Error calculating 30-day metrics: {e}")
-        return 0, 0, 0, 0, 0, 0
+        return 0, 0, 0, 0, 0, 0, 0, 0
 
 def calculate_daily_ISK_volume():
     df = get_all_market_history()
@@ -712,13 +723,13 @@ def render_30day_metrics_ui():
     st.subheader(f"30-Day Market Stats ({metrics_label})", divider="gray")
 
     # Calculate 30-day metrics
-    avg_daily_volume, avg_daily_isk_value, vol_delta, isk_delta, df_7days, df_30days = calculate_30day_metrics(
+    avg_daily_volume_30days, avg_daily_isk_value_30days, vol_delta, isk_delta, df_7days, df_30days, avg_daily_volume_7days, avg_daily_isk_value_7days = calculate_30day_metrics(
             selected_category=metrics_category,
             selected_item_id=metrics_item_id,
         )
 
     # Only show metrics if we have actual history data
-    if avg_daily_volume == 0 and avg_daily_isk_value == 0:
+    if avg_daily_volume_30days == 0 and avg_daily_isk_value_30days == 0:
         logger.warning("Insufficient data recorded for this item")
         st.warning("Insufficient data recorded for this item") # Don't show metrics section if no history data
         return
@@ -726,28 +737,42 @@ def render_30day_metrics_ui():
     colma1, colma2 = st.columns(2)
     with colma1:
         with st.container(border=True):
-            col_m1, col_m2 = st.columns(2)
+            col_m1, col_m2, col_m3 = st.columns(3)
 
             with col_m1:
-                if avg_daily_isk_value > 0:
-                    display_avg_isk = millify.millify(avg_daily_isk_value, precision=2)
-                    st.metric("Avg Daily ISK (30d)", f"{display_avg_isk} ISK", delta=f"{isk_delta}% this week")
+                if avg_daily_isk_value_30days > 0:
+                    display_avg_isk = millify.millify(avg_daily_isk_value_30days, precision=2)
+                    st.metric("Avg Daily ISK (30d)", f"{display_avg_isk} ISK")
                 else:
                     st.metric("Avg Daily ISK (30d)", "0 ISK")
 
-                if avg_daily_volume > 0:
-                    if avg_daily_volume < 1000:
-                        display_avg_volume = f"{avg_daily_volume:,.0f}"
+                if avg_daily_volume_30days > 0:
+                    if avg_daily_volume_30days < 1000:
+                        display_avg_volume = f"{avg_daily_volume_30days:,.0f}"
                     else:
-                        display_avg_volume = millify.millify(avg_daily_volume, precision=1)
-                    st.metric("Avg Daily Items (30d)", f"{display_avg_volume}", delta=f"{vol_delta}% this week")
+                        display_avg_volume = millify.millify(avg_daily_volume_30days, precision=1)
+                    st.metric("Avg Daily Items (30d)", f"{display_avg_volume}")
                 else:
                     st.metric("Avg Daily Items (30d)", "0")
 
             with col_m2:
+                if avg_daily_isk_value_7days > 0:
+                    display_avg_isk = millify.millify(avg_daily_isk_value_7days, precision=2)
+                    st.metric("Avg Daily ISK (7d)", f"{display_avg_isk} ISK", delta=f"{isk_delta}% this week")
+                else:
+                    st.metric("Avg Daily ISK (7d)", "0 ISK")
 
+                if avg_daily_volume_7days > 0:
+                    if avg_daily_volume_30days < 1000:
+                        display_avg_volume = f"{avg_daily_volume_7days:,.0f}"
+                    else:
+                        display_avg_volume = millify.millify(avg_daily_volume_7days, precision=1)
+                    st.metric("Avg Daily Items (7d)", f"{display_avg_volume}", delta=f"{vol_delta}% this week")
+                else:
+                    st.metric("Avg Daily Items (7d)", "0")
+        with col_m3:
                 # Calculate total 30-day ISK value
-                total_30d_isk = avg_daily_isk_value * 30 if avg_daily_isk_value > 0 else 0
+                total_30d_isk = avg_daily_isk_value_30days * 30 if avg_daily_isk_value_30days > 0 else 0
                 if total_30d_isk > 0:
                     display_total_isk = millify.millify(total_30d_isk, precision=2)
                     st.metric("Total Value (30d)", f"{display_total_isk} ISK")
@@ -755,9 +780,12 @@ def render_30day_metrics_ui():
                     st.metric("Total 30d Value", "0 ISK")
 
                 # Calculate total 30-day volume
-                total_30d_volume = avg_daily_volume * 30 if avg_daily_volume > 0 else 0
+                total_30d_volume = avg_daily_volume_30days * 30 if avg_daily_volume_30days is not None and avg_daily_volume_30days > 0 else 0
                 if total_30d_volume > 0:
-                    display_total_volume = millify.millify(total_30d_volume, precision=2)
+                    if total_30d_volume < 1000:
+                        display_total_volume = f"{total_30d_volume:,.0f}"
+                    else:
+                        display_total_volume = millify.millify(total_30d_volume, precision=1)
                     st.metric("Total Volume (30d)", f"{display_total_volume}")
                 else:
                     st.metric("Total 30d Volume", "0")
@@ -832,8 +860,6 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
                 display_jita_price = millify.millify(st.session_state.jita_price, precision=2)
                 st.metric("Jita Price", f"{display_jita_price} ISK")
             
-
-
     with col2:
         if not sell_data.empty:
             volume = sell_data['volume_remain'].sum()
@@ -867,8 +893,8 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
                 current_price = float(st.session_state.current_price)
                 jita_price = float(st.session_state.jita_price)
                 avg_vol = float(avg_daily_vol)
-                cap_util_ratio = calculate_capital_utility_ratio(current_price, jita_price, avg_daily_vol)
-                st.metric("Capital Utility Ratio", f"{cap_util_ratio:.2f}")
+                cap_util_ratio = calculate_capital_utility_ratio(current_price, jita_price, avg_daily_vol, st.session_state.selected_item_id)
+                st.metric("Capital Utility Ratio", f"{cap_util_ratio:.3f}")
             except (ValueError, TypeError) as e:
                 logger.error(f"Error calculating capital utility ratio: {e}")
                 pass
@@ -902,12 +928,37 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
         else:
             pass
 
-def calculate_capital_utility_ratio(staging_price: float, jita_price: float, avg_daily_vol: float)->float:
+def calculate_capital_utility_ratio(staging_price: float, jita_price: float, avg_daily_vol: float, type_id: int)->float:
     """
     Calculate the capital utility ratio
     """
-    capital_utility_ratio = ((staging_price - jita_price) / jita_price) * avg_daily_vol
-    return capital_utility_ratio
+    type_info = TypeInfo(type_id)
+    packaged_volume = type_info.packaged_volume
+    #shipping cost is 374 ISK per m3
+    shipping_rate = 374
+    unit_shipping_cost = shipping_rate * packaged_volume
+    cost_diff = staging_price - (jita_price + unit_shipping_cost)
+    volume_30d = avg_daily_vol * 30
+    profit_30d = cost_diff * volume_30d
+    capital_30d = jita_price * volume_30d
+    captilUtil = profit_30d / capital_30d
+
+    logger.info(f"""
+    Type ID: {type_id}
+    Type Name: {type_info.type_name}
+    Packaged Volume: {millify.millify(type_info.packaged_volume, precision=2)} m³
+    Staging Price: {millify.millify(staging_price, precision=2)} ISK
+    Jita Price: {millify.millify(jita_price, precision=2)} ISK
+    Shipping Rate: {shipping_rate} ISK/m³
+    Unit Shipping Cost: vol: {millify.millify(packaged_volume, precision=2)} m³ * shipping rate: {shipping_rate} ISK/m³ = {millify.millify(unit_shipping_cost, precision=2)} ISK
+    Cost Diff: staging price: {millify.millify(staging_price, precision=2)} ISK - (jita price: {millify.millify(jita_price, precision=2)} ISK + unit shipping cost: {millify.millify(unit_shipping_cost, precision=2)} ISK) = {millify.millify(cost_diff, precision=2)} ISK
+    Volume 30d: avg daily vol: {avg_daily_vol} * 30 = {volume_30d}
+    Profit 30d: cost diff: {millify.millify(cost_diff, precision=2)} ISK * volume 30d: {volume_30d} = {millify.millify(profit_30d, precision=2)} ISK
+    Capital 30d: jita price: {millify.millify(jita_price, precision=2)} ISK * volume 30d: {volume_30d} = {millify.millify(capital_30d, precision=2)} ISK
+    ------------------------------------------------------------
+    Capital Utility Ratio: profit 30d: {millify.millify(profit_30d, precision=2)} ISK / capital 30d: {millify.millify(capital_30d, precision=2)} ISK = {captilUtil:.3f}
+    """)
+    return captilUtil
 
 def get_avg_volume(type_id: int)->float:
     """
