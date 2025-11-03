@@ -87,24 +87,31 @@ def create_fit_df()->pd.DataFrame:
 
     # Use vectorized operations instead of iterating through each fit
     logger.info("Processing fit data with vectorized operations")
-
+    logger.info("FIT SUMMARY DATAFRAME")
+    logger.info(f"df columns: {df.columns}")
+    logger.info(f"df head: {df.head()}")
     # Group by fit_id and aggregate data efficiently
     fit_summary = df.groupby('fit_id').agg({
         'ship_name': 'first',
         'ship_id': 'first',
         'hulls': 'first',
-        'fits_on_mkt': 'min',
-        'avg_vol': 'first' if 'avg_vol' in df.columns else lambda x: 0
+        'fits_on_mkt': 'min'
     }).reset_index()
 
-    # Get ship group and price data efficiently
+    # Get ship group and price data efficiently (where type_id == ship_id)
     ship_data = df[df['type_id'] == df['ship_id']].groupby('fit_id').agg({
         'group_name': 'first',
         'price': 'first'
     }).reset_index()
 
+    # Get avg_vol from ship row (where type_id == ship_id OR category_id == 6)
+    ship_avg_vol = df[(df['type_id'] == df['ship_id']) | (df['category_id'] == 6)].groupby('fit_id').agg({
+        'avg_vol': 'first'
+    }).reset_index()
+
     # Merge the data
     fit_summary = fit_summary.merge(ship_data, on='fit_id', how='left')
+    fit_summary = fit_summary.merge(ship_avg_vol, on='fit_id', how='left')
     fit_summary['price'] = fit_summary['price'].fillna(0)
     fit_summary['ship_group'] = fit_summary['group_name']
 
@@ -182,6 +189,4 @@ def get_all_fit_data()->pd.DataFrame:
         return pd.DataFrame()
 
 if __name__ == "__main__":
-    df = get_all_fit_data()
-    print(df.head())
-    print(df.dtypes)
+    pass

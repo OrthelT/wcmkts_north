@@ -83,7 +83,8 @@ def categorize_ship_by_role(ship_name: str) -> str:
         'Raven Navy Issue', 'Typhoon', 'Tempest', 'Maelstrom', 'Abaddon',
         'Apocalypse', 'Armageddon', 'Rifter', 'Punisher', 'Merlin', 'Incursus',
         'Bellicose', 'Deimos', 'Nightmare', 'Retribution', 'Vengeance', 'Exequror Navy Issue',
-        'Hound', 'Nemesis', 'Manticore', 'Vulture', 'Moa', 'Harpy', 'Tempest Fleet Issue'
+        'Hound', 'Nemesis', 'Manticore', 'Vulture', 'Moa', 'Harpy', 'Tempest Fleet Issue', 'Hurricane Fleet Issue',
+        'Apocalypse Navy Issue', 'Kikimora'
     }
 
     # Logi - Logistics/healing ships
@@ -94,7 +95,7 @@ def categorize_ship_by_role(ship_name: str) -> str:
 
     # Links - Command ships and fleet booster ships
     links_ships = {
-        'Claymore', 'Devoter', 'Drake', 'Cyclone', 'Sleipnir', 'Nighthawk',
+        'Claymore', 'Drake', 'Cyclone', 'Sleipnir', 'Nighthawk',
         'Damnation', 'Astarte', 'Command Destroyer', 'Bifrost', 'Pontifex',
         'Stork', 'Magus', 'Hecate', 'Confessor', 'Jackdaw',
     }
@@ -106,7 +107,7 @@ def categorize_ship_by_role(ship_name: str) -> str:
         'Griffin', 'Maulus', 'Crucifier', 'Heretic', 'Flycatcher',
         'Eris', 'Dictor', 'Hictor', 'Broadsword', 'Phobos', 'Onyx',
         'Crow', 'Claw', 'Crusader', 'Taranis', 'Atron', 'Slasher',
-        'Executioner', 'Condor', 'Svipul'
+        'Executioner', 'Condor', 'Svipul', 'Devoter'
     }
 
     # Check each category
@@ -138,6 +139,9 @@ def display_categorized_doctrine_data(selected_data):
     if selected_data.empty:
         st.warning("No data to display")
         return
+    else:
+        logger.info(f"Selected data: {selected_data.head()}")
+        logger.info(f"Selected data columns: {selected_data.columns}")
 
     # Create a proper copy of the DataFrame to avoid SettingWithCopyWarning
     selected_data_with_roles = selected_data.copy()

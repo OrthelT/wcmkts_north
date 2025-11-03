@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, text, select, NullPool
 import streamlit as st
 import os
-#os.environ.setdefault("RUST_LOG", "debug")
+os.environ.setdefault("RUST_LOG", "debug")
 import libsql
 from logging_config import setup_logging
 import sqlite3 as sql
@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from models import UpdateLog
 import threading
 from contextlib import suppress, contextmanager
-
+from time import perf_counter
+from datetime import datetime, timezone
 
 logger = setup_logging(__name__)
 
@@ -296,8 +297,13 @@ class DatabaseConfig:
         connections to prevent corruption. Read-only engine is preserved for
         minimal disruption to concurrent reads after sync completes.
         """
-        logger.info(f"current database info: {self.read_dbinfo()}")
+        #log the current database info and the time
+        start_info = self.read_dbinfo()
+        logger.info(f"current database info: {start_info}")
         logger.info("-"*40)
+        start_time = perf_counter()
+        logger.info(f"sync() started at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
         # Acquire write lock to block all access during sync
         lock = self._get_local_lock()
         with lock.write_lock():
@@ -319,10 +325,19 @@ class DatabaseConfig:
                         with suppress(Exception):
                             conn.close()
                             logger.info("Connection closed")
-
+                
+                #log sync performance
+                logger.info("-"*40)
                 update_time = datetime.now(timezone.utc)
-                logger.info(f"Database synced at {update_time} UTC")
-                logger.info(f"new database info: {self.read_dbinfo()}")
+                logger.info(f"Database synced at {update_time.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+                end_info = self.read_dbinfo()
+                logger.info(f"new database info: {end_info}")
+                logger.info(f"start info: {start_info}")
+                logger.info(f"end info: {end_info}")
+                end_time = perf_counter()
+                elapsed_time = round((end_time-start_time),1)
+                sync_time_mins = elapsed_time / 60
+                logger.info(f"sync time: {round(sync_time_mins, 2)} minutes")
                 logger.info("-"*40)
 
                 # Post-sync integrity validation
@@ -464,6 +479,5 @@ class DatabaseConfig:
         except FileNotFoundError:
             logger.info("DB does not exist, syncing")
             return None
-
 if __name__ == "__main__":
     pass
