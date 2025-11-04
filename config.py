@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, text, select, NullPool
 import streamlit as st
 import os
-os.environ.setdefault("RUST_LOG", "debug")
+#os.environ.setdefault("RUST_LOG", "debug")
 import libsql
 from logging_config import setup_logging
 import sqlite3 as sql
