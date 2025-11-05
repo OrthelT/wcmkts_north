@@ -436,6 +436,13 @@ def main():
         st.session_state.module_list_state = {}
     if 'csv_module_list_state' not in st.session_state:
         st.session_state.csv_module_list_state = {}
+    
+    # Clean up any download_fit_* keys that may have been set in session state
+    # Download buttons don't support pre-set values in session state
+    download_keys_to_delete = [k for k in st.session_state.keys() 
+                               if isinstance(k, str) and k.startswith('download_fit_')]
+    for key in download_keys_to_delete:
+        del st.session_state[key]
 
     if st.session_state.get('clear_ship_checkboxes', False):
         # Delete all ship checkbox keys that match the pattern
@@ -601,11 +608,12 @@ def main():
                     # Add checkbox next to ship name with unique key using fit_id and ship_name
                     unique_key = f"ship_{row['fit_id']}_{row['ship_name']}"
 
-                    if row['ship_name'] in st.session_state.selected_ships:
-                        st.session_state[unique_key] = True
+                    # Don't pre-set session state here - let the checkbox manage its own state
+                    # Only initialize if not already present
+                    if unique_key not in st.session_state:
+                        st.session_state[unique_key] = row['ship_name'] in st.session_state.selected_ships
 
-                    st.checkbox("x", key=unique_key,
-                                value=st.session_state.get(unique_key, False), label_visibility="hidden")
+                    st.checkbox("x", key=unique_key, label_visibility="hidden")
                     if st.session_state.get(unique_key, False) == True and row['ship_name'] not in st.session_state.selected_ships:
                         st.session_state.selected_ships.append(row['ship_name'])
                         logger.info(f"Added {row['ship_name']} to selected ships")
@@ -748,12 +756,12 @@ def main():
 
                     col_a, col_b = st.columns([0.1, 0.9])
                     with col_a:
+                        # Don't pre-set session state here - let the checkbox manage its own state
+                        # Only initialize if not already present
+                        if module_key not in st.session_state:
+                            st.session_state[module_key] = display_key in st.session_state.selected_modules
 
-                        if display_key in st.session_state.selected_modules:
-                            st.session_state[module_key] = True
-
-                        st.checkbox("1", key=module_key, label_visibility="hidden",
-                                        value=st.session_state.get(module_key, False))
+                        st.checkbox("1", key=module_key, label_visibility="hidden")
                         if st.session_state.get(module_key, False) == True and display_key not in st.session_state.selected_modules:
                             logger.info(f"Adding {display_key}-{module_key} to selected modules")
                             st.session_state.selected_modules.append(display_key)
