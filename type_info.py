@@ -10,8 +10,8 @@ import json
 
 logger = setup_logging(__name__)
 
-sde_db_path = "sdelite.db"
-sde_db_url = f"sqlite+libsql:///sdelite.db"
+sde_db_path = "sdelite2.db"
+sde_db_url = f"sqlite+libsql:///sdelite2.db"
 sde_db_engine = create_engine(sde_db_url)
 
 

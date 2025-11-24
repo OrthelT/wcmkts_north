@@ -886,7 +886,11 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
             st.metric("Total Sell Orders", "0")
 
         if st.session_state.selected_item_id is not None:
-            avg_daily_vol = get_avg_volume(st.session_state.selected_item_id)
+            try:
+                avg_daily_vol = get_avg_volume(st.session_state.selected_item_id)
+            except Exception as e:
+                logger.error(f"Error getting average volume: {e}")
+                avg_daily_vol = None
             try:
                 logger.info(f"Current price: {st.session_state.current_price}, Jita price: {st.session_state.jita_price}, Avg volume: {avg_daily_vol}")
                 # Ensure all values are numeric
