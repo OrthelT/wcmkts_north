@@ -91,7 +91,7 @@ class DatabaseConfig:
 
     _db_paths = {
         "wcmktnorth2": "wcmktnorth2.db", #production database
-        "sde": "sdelite.db",
+        "sde": "sdelite2.db",
         "build_cost": "buildcost.db",
         "wcmkt3": "wcmkt3.db" #testing db
 
@@ -99,14 +99,14 @@ class DatabaseConfig:
 
     _db_turso_urls = {
         "wcmktnorth2_turso": st.secrets.wcmktnorth2_turso.url,
-        "sde_turso": st.secrets.sde_lite_turso.url,
+        "sde_turso": st.secrets.sdelite2_turso.url,
         "build_cost_turso": st.secrets.buildcost_turso.url,
         "wcmkt3_turso": st.secrets.wcmkt3_turso.url,
     }
 
     _db_turso_auth_tokens = {
         "wcmktnorth2_turso": st.secrets.wcmktnorth2_turso.token,
-        "sde_turso": st.secrets.sde_lite_turso.token,
+        "sde_turso": st.secrets.sdelite2_turso.token,
         "build_cost_turso": st.secrets.buildcost_turso.token,
         "wcmkt3_turso": st.secrets.wcmkt3_turso.token,
     }

@@ -107,7 +107,7 @@ def categorize_ship_by_role(ship_name: str) -> str:
         'Griffin', 'Maulus', 'Crucifier', 'Heretic', 'Flycatcher',
         'Eris', 'Dictor', 'Hictor', 'Broadsword', 'Phobos', 'Onyx',
         'Crow', 'Claw', 'Crusader', 'Taranis', 'Atron', 'Slasher',
-        'Executioner', 'Condor', 'Svipul', 'Devoter'
+        'Executioner', 'Condor', 'Svipul', 'Devoter', 'Porpoise', 'Nereus'
     }
 
     # Check each category
@@ -421,7 +421,7 @@ def main():
         else:
             logger.warning("Logo image not found")
     with col2:
-        st.title("Doctrine Report")
+        st.title("B9 Doctrine Report")
         st.text("Market Status By Fleet Doctrine")
 
 
