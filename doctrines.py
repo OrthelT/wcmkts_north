@@ -76,18 +76,13 @@ def new_get_targets():
 
 @st.cache_data(ttl=600, show_spinner="Loading cached doctrine fits...")
 def create_fit_df()->pd.DataFrame:
-    logger.info("Creating fit dataframe")
-    t0 = time.perf_counter()
+    logger.info("Creating fit dataframe using get_all_fit_data()")
     df = get_all_fit_data()
-    t1 = time.perf_counter()
-    elapsed_time = round((t1 - t0)*1000, 2)
-    logger.info(f"TIME get_all_fit_data() = {elapsed_time} ms")
 
     if df.empty:
+        logger.warning("No doctrine fits found in the database.")
         return pd.DataFrame(), pd.DataFrame()
 
-    # Use vectorized operations instead of iterating through each fit
-    logger.info("Processing fit data with vectorized operations")
 
     # Group by fit_id and aggregate data efficiently
     fit_summary = df.groupby('fit_id').agg({
@@ -193,17 +188,11 @@ def create_fit_df()->pd.DataFrame:
     fit_summary = fit_summary.merge(fit_cost, on='fit_id', how='left')
     fit_summary['total_cost'] = fit_summary['total_cost'].fillna(0)
 
-    # Get target values for all ships at once (batch operation)
-    t2 = time.perf_counter()
     targets_df = new_get_targets()
     targets_df = targets_df.drop_duplicates(subset=['fit_id'], keep='first')
     targets_df = targets_df.reset_index(drop=True)
     targets_df = targets_df[['fit_id', 'ship_target']]
     fit_summary = fit_summary.merge(targets_df, on='fit_id', how='left')
-
-    t3 = time.perf_counter()
-    elapsed_time = round((t3 - t2)*1000, 2)
-    logger.info(f"TIME new_get_targets() = {elapsed_time} ms")
 
     # Calculate target percentages vectorized
     fit_summary['target_percentage'] = (

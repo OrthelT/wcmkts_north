@@ -84,7 +84,7 @@ def categorize_ship_by_role(ship_name: str) -> str:
         'Apocalypse', 'Armageddon', 'Rifter', 'Punisher', 'Merlin', 'Incursus',
         'Bellicose', 'Deimos', 'Nightmare', 'Retribution', 'Vengeance', 'Exequror Navy Issue',
         'Hound', 'Nemesis', 'Manticore', 'Vulture', 'Moa', 'Harpy', 'Tempest Fleet Issue', 'Hurricane Fleet Issue',
-        'Apocalypse Navy Issue', 'Kikimora'
+        'Apocalypse Navy Issue', 'Kikimora', 'Cyclone Fleet Issue'
     }
 
     # Logi - Logistics/healing ships
@@ -139,9 +139,6 @@ def display_categorized_doctrine_data(selected_data):
     if selected_data.empty:
         st.warning("No data to display")
         return
-    else:
-        logger.info(f"Selected data: {selected_data.head()}")
-        logger.info(f"Selected data columns: {selected_data.columns}")
 
     # Create a proper copy of the DataFrame to avoid SettingWithCopyWarning
     selected_data_with_roles = selected_data.copy()
@@ -206,9 +203,6 @@ def display_categorized_doctrine_data(selected_data):
             df = df.drop(columns=['role']).reset_index(drop=True)
             df['ship_target'] = df['ship_target'] * st.session_state.target_multiplier
             df['target_percentage'] = round(df['fits'] / df['ship_target'], 2)
-            logger.info(f"DF: {df.head()}")
-            logger.info(f"DF columns: {df.columns}")
-
 
             st.dataframe(
                 df, 
@@ -260,6 +254,8 @@ def display_categorized_doctrine_data(selected_data):
                 hide_index=True
             )
 
+
+
 def display_low_stock_modules(selected_data: pd.DataFrame, doctrine_modules: pd.DataFrame, selected_fit_ids: list, fit_summary: pd.DataFrame, lead_ship_id: int, selected_doctrine_id: int):
     """Display low stock modules for the selected doctrine"""
         # Get module data from master_df for the selected doctrine
@@ -269,136 +265,141 @@ def display_low_stock_modules(selected_data: pd.DataFrame, doctrine_modules: pd.
         st.markdown("*Summary of the stock status of the three lowest stock modules for each ship in the selected doctrine. Numbers in parentheses represent the number of fits that can be supported with the current stock of the item. Use the checkboxes to select items for export to a CSV file.*")
         st.markdown("---")
 
-        exceptions = {21: 123, 75: 473, 84: 494}
+    else:
+        logger.warning("No doctrine modules found")
+        return
 
-        if selected_doctrine_id in exceptions:
-            lead_fit_id = exceptions[selected_doctrine_id]
-        else:
-            lead_fit_id = selected_data[selected_data['ship_id'] == lead_ship_id].fit_id.iloc[0]
- 
+    exceptions = {21: 123, 75: 473, 84: 494}
 
+    if selected_doctrine_id in exceptions:
+        lead_fit_id = exceptions[selected_doctrine_id]
+    else:
+        lead_fit_id = selected_data[selected_data['ship_id'] == lead_ship_id].fit_id.iloc[0]
+    # Create two columns for display
+    col1, col2 = st.columns(2)
 
-        # Create two columns for display
-        col1, col2 = st.columns(2)
+    logger.info(f"selected_fit_ids: {selected_fit_ids}")
 
-        # Get unique fit_ids and process each ship
-        for i, fit_id in enumerate(selected_fit_ids):
+    # Get unique fit_ids and process each ship
+    logger.info(f"Processing {len(selected_fit_ids)} fits")
+    logger.info(f"lead_fit_id: {lead_fit_id}")
 
-            if i == 0:
-                fit_id = lead_fit_id
-                fit_data = doctrine_modules[doctrine_modules['fit_id'] == fit_id]
-            elif i > 0 and fit_id != lead_fit_id:
-                fit_data = doctrine_modules[doctrine_modules['fit_id'] == fit_id]
-            else:
-                continue
+    def render_fit_data(fit_id_to_render: int, i: int):
+        """Prepare fit data for display"""
+        fit_data = doctrine_modules[doctrine_modules['fit_id'] == fit_id_to_render]
+        if fit_data.empty:
+            logger.warning(f"No fit data found for fit_id: {fit_id_to_render}")
+            return
 
-            if fit_data.empty:
-                continue
+        # Get ship information
+        ship_data = fit_data.iloc[0]
+        ship_name = ship_data['ship_name']
+        ship_id = ship_data['ship_id']
+        # Get modules only (exclude the ship hull)
+        module_data = fit_data[fit_data['type_id'] != ship_id]
+        ship_data = fit_data[fit_data['type_id'] == ship_id]
 
-            # Get ship information
-            ship_data = fit_data.iloc[0]
-            ship_name = ship_data['ship_name']
-            ship_id = ship_data['ship_id']
-            # Get modules only (exclude the ship hull)
-            module_data = fit_data[fit_data['type_id'] != ship_id]
-            ship_data = fit_data[fit_data['type_id'] == ship_id]
+        if module_data.empty:
+            logger.warning(f"No module data found for fit_id: {fit_id_to_render}")
+            return
 
-            if module_data.empty:
-                continue
+        # Get the 3 lowest stock modules for this ship
+        lowest_modules = module_data.sort_values('fits_on_mkt').head(3)
+        lowest_modules = pd.concat([ship_data,lowest_modules])
+        # Determine which column to use
+        target_col = col1 if i % 2 == 0 else col2
 
-            # Get the 3 lowest stock modules for this ship
-            lowest_modules = module_data.sort_values('fits_on_mkt').head(3)
-            lowest_modules = pd.concat([ship_data,lowest_modules])
+        with target_col:
+            # Ship header with image
+            ship_image_url = f"https://images.evetech.net/types/{ship_id}/render?size=64"
 
-            # Determine which column to use
-            target_col = col1 if i % 2 == 0 else col2
+            # Create ship header section
+            ship_col1, ship_col2 = st.columns([0.2, 0.8])
 
-            with target_col:
-                # Ship header with image
-                ship_image_url = f"https://images.evetech.net/types/{ship_id}/render?size=64"
+            with ship_col1:
+                try:
+                    st.image(ship_image_url, width=64)
+                except Exception:
+                    st.text("🚀")
+                st.text(f"Fit ID: {fit_id_to_render}")
 
-                # Create ship header section
-                ship_col1, ship_col2 = st.columns([0.2, 0.8])
+            with ship_col2:
+                # Get fit name from selected_data
+                fit_name = get_fit_name_from_db(fit_id_to_render)
 
-                with ship_col1:
-                    try:
-                        st.image(ship_image_url, width=64)
-                    except Exception:
-                        st.text("🚀")
-                    st.text(f"Fit ID: {fit_id}")
+                ship_target = fit_summary[fit_summary['fit_id'] == fit_id_to_render]['ship_target'].iloc[0]
+                if pd.notna(ship_target):
+                    ship_target = int(ship_target * st.session_state.target_multiplier)
+                else:
+                    ship_target = 0
+                st.subheader(ship_name,divider="orange")
+                st.markdown(f"{fit_name}  (**Target: {ship_target}**)")
 
-                with ship_col2:
-                    # Get fit name from selected_data
-                    fit_name = get_fit_name_from_db(fit_id)
+            # Display the 3 lowest stock modules
+            for _, module_row in lowest_modules.iterrows():
+                # Get target for this fit from selected_data
+                fit_target_row = selected_data[selected_data['fit_id'] == fit_id_to_render]
 
-                    ship_target = fit_summary[fit_summary['fit_id'] == fit_id]['ship_target'].iloc[0]
-                    if pd.notna(ship_target):
-                        ship_target = int(ship_target * st.session_state.target_multiplier)
+                if not fit_target_row.empty and 'ship_target' in fit_target_row.columns:
+                    target = fit_target_row['ship_target'].iloc[0]
+                else:
+                    st.write("No target found for this fit")
+                    target = 20  # Default target
+
+                module_name = module_row['type_name']
+                stock = int(module_row['fits_on_mkt']) if pd.notna(module_row['fits_on_mkt']) else 0
+                module_target = int(target) if pd.notna(target) else 0
+                module_key = f"ship_module_{fit_id_to_render}_{module_name}_{stock}_{module_target}"
+
+                # Determine module status based on target comparison with new tier system
+                if stock > target * 0.9:
+                    badge_status = "On Target"
+                    badge_color = "green"
+                elif stock > target * 0.2:
+                    badge_status = "Needs Attention"
+                    badge_color = "orange"
+                else:
+                    badge_status = "Critical"
+                    badge_color = "red"
+
+                # Create checkbox and module info
+                checkbox_col, badge_col, text_col = st.columns([0.1, 0.2, 0.7])
+
+                with checkbox_col:
+                    is_selected = st.checkbox(
+                        "x",
+                        key=module_key,
+                        label_visibility="hidden",
+                        value=module_name in st.session_state.selected_modules
+                    )
+
+                    # Update session state based on checkbox
+                    if is_selected and module_name not in st.session_state.selected_modules:
+                        st.session_state.selected_modules.append(module_name)
+                        # Also update the stock info
+                        get_module_stock_list([module_name])
+                    elif not is_selected and module_name in st.session_state.selected_modules:
+                        st.session_state.selected_modules.remove(module_name)
+
+                with badge_col:
+                    # Show badge for all modules to indicate their status
+                    st.badge(badge_status, color=badge_color)
+
+                with text_col:
+                    if module_row['type_id'] == ship_id:
+                        st.markdown(f'<span style="color:{badge_color}"> **{ship_name}** </span>  ({stock})', unsafe_allow_html=True)
+                        # st.markdown(f"**{ship_name}** ({stock})")
                     else:
-                        ship_target = 0
+                        st.text(f"{module_name} ({stock})")
 
-                    st.subheader(ship_name,divider="orange")
-                    st.markdown(f"{fit_name}  (**Target: {ship_target}**)")
+        # Add spacing between ships
+        st.markdown("<br>", unsafe_allow_html=True)
 
-                # Display the 3 lowest stock modules
-                for _, module_row in lowest_modules.iterrows():
-                    # Get target for this fit from selected_data
-                    fit_target_row = selected_data[selected_data['fit_id'] == fit_id]
+    render_fit_data(lead_fit_id, 0)
+    for i, fit_id in enumerate(selected_fit_ids):
+        if fit_id != lead_fit_id:
+            render_fit_data(fit_id, i)
 
-                    if not fit_target_row.empty and 'ship_target' in fit_target_row.columns:
-                        target = fit_target_row['ship_target'].iloc[0]
-                    else:
-                        st.write("No target found for this fit")
-                        target = 20  # Default target
-
-                    module_name = module_row['type_name']
-                    stock = int(module_row['fits_on_mkt']) if pd.notna(module_row['fits_on_mkt']) else 0
-                    module_target = int(target) if pd.notna(target) else 0
-                    module_key = f"ship_module_{fit_id}_{module_name}_{stock}_{module_target}"
-
-                    # Determine module status based on target comparison with new tier system
-                    if stock > target * 0.9:
-                        badge_status = "On Target"
-                        badge_color = "green"
-                    elif stock > target * 0.2:
-                        badge_status = "Needs Attention"
-                        badge_color = "orange"
-                    else:
-                        badge_status = "Critical"
-                        badge_color = "red"
-
-                    # Create checkbox and module info
-                    checkbox_col, badge_col, text_col = st.columns([0.1, 0.2, 0.7])
-
-                    with checkbox_col:
-                        is_selected = st.checkbox(
-                            "x",
-                            key=module_key,
-                            label_visibility="hidden",
-                            value=module_name in st.session_state.selected_modules
-                        )
-
-                        # Update session state based on checkbox
-                        if is_selected and module_name not in st.session_state.selected_modules:
-                            st.session_state.selected_modules.append(module_name)
-                            # Also update the stock info
-                            get_module_stock_list([module_name])
-                        elif not is_selected and module_name in st.session_state.selected_modules:
-                            st.session_state.selected_modules.remove(module_name)
-
-                    with badge_col:
-                        # Show badge for all modules to indicate their status
-                        st.badge(badge_status, color=badge_color)
-
-                    with text_col:
-                        if module_row['type_id'] == ship_id:
-                            st.markdown(f'<span style="color:{badge_color}"> **{ship_name}** </span>  ({stock})', unsafe_allow_html=True)
-                            # st.markdown(f"**{ship_name}** ({stock})")
-                        else:
-                            st.text(f"{module_name} ({stock})")
-
-                # Add spacing between ships
-                st.markdown("<br>", unsafe_allow_html=True)
 
 def main():
     # Initialize session state for target multiplier
@@ -440,7 +441,10 @@ def main():
     selected_doctrine_id = df[df.doctrine_name == selected_doctrine].doctrine_id.unique()[0]
 
     selected_data = fit_summary[fit_summary['fit_id'].isin(df[df.doctrine_name == selected_doctrine].fit_id.unique())]
-
+    logger.info(f"--------------------------------")
+    logger.info(f"selected_doctrine: {selected_doctrine}")
+    logger.info(f"selected_doctrine_id: {selected_doctrine_id}")
+    logger.info(f"--------------------------------")
     # Get module data from master_df for the selected doctrine
     selected_fit_ids = df[df.doctrine_name == selected_doctrine].fit_id.unique()
     doctrine_modules = master_df[master_df['fit_id'].isin(selected_fit_ids)]
