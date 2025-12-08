@@ -343,12 +343,15 @@ def get_all_market_history()->pd.DataFrame:
     return df
 
 def get_update_time()->str:
+    """Return last local update time as formatted string, handling stale/bool state."""
     if "local_update_status" in st.session_state:
-        update_time = st.session_state.local_update_status["updated"]
-        update_time = update_time.strftime("%Y-%m-%d | %H:%M UTC")
-    else:
-        update_time = None
-    return update_time
+        status = st.session_state.local_update_status
+        if isinstance(status, dict) and status.get("updated"):
+            try:
+                return status["updated"].strftime("%Y-%m-%d | %H:%M UTC")
+            except Exception as e:
+                logger.error(f"Failed to format local_update_status.updated: {e}")
+    return None
 
 def get_module_fits(type_id):
     with mkt_db.local_access():
@@ -448,15 +451,3 @@ def get_chart_table_data()->pd.DataFrame:
 
 if __name__ == "__main__":
     pass
-        # from datetime import datetime, timezone
-        # df = pd.read_csv("wc_northern_supply_targets.csv")
-        # df = df.drop(columns=['group'])
-        # df = df.drop(columns=['created_at'])
-        # df['created_at'] = datetime.now().astimezone(timezone.utc)
-
-        # db = DatabaseConfig("wcmkt")
-        # engine = db.remote_engine
-        # with engine.connect() as conn:
-        #     df.to_sql('ship_targets', conn, if_exists='replace', index=False)
-
-    
