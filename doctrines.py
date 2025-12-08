@@ -121,10 +121,10 @@ def create_fit_df()->pd.DataFrame:
             type_name = row.get('type_name', f'type_id {type_id}')
             fit_id = row['fit_id']
             logger.warning(f"Null price found for {type_name} (type_id: {type_id}) in fit_id {fit_id}")
-        
+
         # Get unique type_ids with null prices
         null_type_ids = df[null_price_mask]['type_id'].unique().tolist()
-        
+
         # Try to get avg_price from marketstats table
         if null_type_ids:
             placeholders = ','.join(['?'] * len(null_type_ids))
@@ -140,7 +140,7 @@ def create_fit_df()->pd.DataFrame:
                 avg_price_map = {}
         else:
             avg_price_map = {}
-        
+
         # Fill null prices with avg_price where available
         for type_id in null_type_ids:
             if type_id in avg_price_map:
@@ -150,7 +150,7 @@ def create_fit_df()->pd.DataFrame:
                     type_mask = (df['type_id'] == type_id) & df['price'].isna()
                     df.loc[type_mask, 'price'] = avg_price
                     logger.info(f"Filled null price for type_id {type_id} with avg_price: {avg_price}")
-        
+
         # For remaining null prices, try Jita price
         remaining_nulls = df['price'].isna()
         if remaining_nulls.any():
@@ -171,7 +171,7 @@ def create_fit_df()->pd.DataFrame:
                     logger.error(f"Error fetching Jita price for type_id {type_id}: {e}")
                     type_mask = (df['type_id'] == type_id) & df['price'].isna()
                     df.loc[type_mask, 'price'] = 0
-        
+
         # Fill any remaining nulls with 0 as final fallback
         if df['price'].isna().any():
             logger.warning("Still have null prices after filling with Jita price")
@@ -218,14 +218,19 @@ def create_fit_df()->pd.DataFrame:
 
     return df, fit_summary
 
-def calculate_jita_fit_cost_and_delta(fit_data: pd.DataFrame, current_fit_cost: float) -> tuple[float, float | None]:
+def calculate_jita_fit_cost_and_delta(
+    fit_data: pd.DataFrame,
+    current_fit_cost: float,
+    jita_price_map: dict[int, float] | None = None
+) -> tuple[float, float | None]:
     """
     Calculate the fit cost at Jita prices and the percentage delta compared to current market prices.
-    
+
     Args:
         fit_data: DataFrame containing fit items with columns: type_id, fit_qty
         current_fit_cost: The current fit cost at market prices
-    
+        jita_price_map: Optional pre-fetched mapping of type_id -> price to avoid repeat API calls
+
     Returns:
         tuple: (jita_fit_cost, percentage_delta)
             - jita_fit_cost: Total cost of the fit at Jita prices
@@ -234,25 +239,25 @@ def calculate_jita_fit_cost_and_delta(fit_data: pd.DataFrame, current_fit_cost: 
     """
     if fit_data.empty:
         return 0.0, None
-    
+
     # Get unique type_ids from the fit
     type_ids = fit_data['type_id'].unique().tolist()
-    
-    # Fetch all Jita prices at once
-    jita_prices = get_multi_item_jita_price(type_ids)
-    
+
+    # Fetch all Jita prices at once (use provided map when available)
+    jita_prices = jita_price_map or get_multi_item_jita_price(type_ids)
+
     if not jita_prices:
         logger.warning("Could not fetch any Jita prices for fit items")
         return 0.0, None
-    
+
     jita_fit_cost = 0.0
     missing_prices = []
-    
+
     # Calculate Jita cost for each item in the fit
     for _, row in fit_data.iterrows():
         type_id = row['type_id']
         fit_qty = row['fit_qty']
-        
+
         if type_id in jita_prices:
             jita_price = jita_prices[type_id]
             if jita_price > 0:
@@ -261,19 +266,22 @@ def calculate_jita_fit_cost_and_delta(fit_data: pd.DataFrame, current_fit_cost: 
                 logger.warning(f"Jita price for type_id {type_id} is not positive: {jita_price}")
         else:
             missing_prices.append(type_id)
-    
+
     if missing_prices:
         logger.warning(f"Missing Jita prices for {len(missing_prices)} items: {missing_prices[:5]}{'...' if len(missing_prices) > 5 else ''}")
-    
+
     # Calculate percentage delta: (fit_cost - jita_fit_cost)/jita_fit_cost * 100
     if jita_fit_cost > 0:
         percentage_delta = ((current_fit_cost - jita_fit_cost) / jita_fit_cost) * 100
     else:
         percentage_delta = None
         if current_fit_cost > 0:
-            logger.warning(f"Jita fit cost is 0 but current fit cost is {current_fit_cost}, cannot calculate delta. "
-                          f"This may indicate missing Jita prices for some items in the fit.")
-    
+            logger.warning(
+                "Jita fit cost is 0 but current fit cost is %s, cannot calculate delta. "
+                "This may indicate missing Jita prices for some items in the fit.",
+                current_fit_cost,
+            )
+
     return jita_fit_cost, percentage_delta
 
 @st.cache_data(ttl=600)
