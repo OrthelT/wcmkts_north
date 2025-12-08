@@ -204,12 +204,12 @@ def get_module_stock_list(module_names: list):
                 module_info = f"{module_name} (Total: {int(df.loc[0, 'total_stock'])} | Fits: {int(df.loc[0, 'fits_on_mkt'])})"
                 if usage_display:
                     module_info = f"{module_info} | Used in: {usage_display}"
-                csv_module_info = f"{module_name},{int(df.loc[0, 'type_id'])},{int(df.loc[0, 'total_stock'])},{int(df.loc[0, 'fits_on_mkt'])}\n"
+                csv_module_info = f"{module_name},{int(df.loc[0, 'type_id'])},{int(df.loc[0, 'total_stock'])},{int(df.loc[0, 'fits_on_mkt'])},,{usage_display}\n"
             else:
                 module_info = f"{module_name}"
                 if usage_display:
                     module_info = f"{module_info} | Used in: {usage_display}"
-                csv_module_info = f"{module_name},0,0,0\n"
+                csv_module_info = f"{module_name},0,0,0,,{usage_display}\n"
 
             st.session_state.module_list_state[module_name] = module_info
             st.session_state.csv_module_list_state[module_name] = csv_module_info
@@ -251,10 +251,10 @@ def get_ship_stock_list(ship_names: list):
                 ship_fits = int(df.loc[0, 'fits_on_mkt'])
                 ship_target = get_ship_target(ship_id, 0)
                 ship_info = f"{ship} (Qty: {ship_stock} | Fits: {ship_fits} | Target: {ship_target})"
-                csv_ship_info = f"{ship},{ship_id},{ship_stock},{ship_fits},{ship_target}\n"
+                csv_ship_info = f"{ship},{ship_id},{ship_stock},{ship_fits},{ship_target},\n"
             else:
                 ship_info = ship
-                csv_ship_info = f"{ship},0,0,0,0\n"
+                csv_ship_info = f"{ship},0,0,0,0,\n"
 
             st.session_state.ship_list_state[ship] = ship_info
             st.session_state.csv_ship_list_state[ship] = csv_ship_info
@@ -968,7 +968,7 @@ def main():
 
         if st.session_state.selected_ships:
             export_text += "SHIPS:\n" + "\n".join(ship_list)
-            csv_export += "Type,TypeID,Quantity,Fits,Target\n"  # Updated CSV header
+            csv_export += "Type,TypeID,Quantity,Fits,Target,Usage\n"  # Updated CSV header
             csv_export += "".join(csv_ship_list)
 
             if st.session_state.selected_modules:
@@ -981,7 +981,7 @@ def main():
             export_text += "MODULES:\n" + "\n".join(module_list)
 
             if not st.session_state.selected_ships:
-                csv_export += "Type,TypeID,Quantity,Fits,Target\n"
+                csv_export += "Type,TypeID,Quantity,Fits,Target,Usage\n"
             csv_export += "".join(csv_module_list)
 
         # Download button
