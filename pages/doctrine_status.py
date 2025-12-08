@@ -158,11 +158,57 @@ def get_module_stock_list(module_names: list):
                 """
             )
             df = read_df(mkt_db, query, {"module_name": module_name})
+            usage_display = ""
+            try:
+                usage_query = text(
+                    """
+                    SELECT st.ship_name, st.ship_target, d.fit_qty
+                    FROM doctrines d
+                    JOIN ship_targets st ON d.fit_id = st.fit_id
+                    WHERE d.type_name = :module_name
+                    """
+                )
+                usage_df = read_df(mkt_db, usage_query, {"module_name": module_name})
+                if not usage_df.empty:
+                    grouped_usage = (
+                        usage_df
+                        .fillna({"ship_target": 0, "fit_qty": 0})
+                        .groupby(["ship_name", "ship_target"], dropna=False)["fit_qty"]
+                        .sum()
+                        .reset_index()
+                    )
+                    usage_parts = []
+                    for _, usage_row in grouped_usage.iterrows():
+                        fit_name = (
+                            str(usage_row["ship_name"])
+                            if pd.notna(usage_row["ship_name"])
+                            else "Unknown Fit"
+                        )
+                        ship_target = (
+                            int(usage_row["ship_target"])
+                            if pd.notna(usage_row["ship_target"])
+                            else 0
+                        )
+                        fit_qty = (
+                            int(usage_row["fit_qty"])
+                            if pd.notna(usage_row["fit_qty"])
+                            else 0
+                        )
+                        modules_needed = ship_target * fit_qty
+                        usage_parts.append(f"{fit_name}({modules_needed})")
+                    usage_display = ", ".join(usage_parts)
+            except Exception as e:
+                logger.error(f"Error getting fit usage for {module_name}: {e}")
+
             if not df.empty and pd.notna(df.loc[0, 'total_stock']) and pd.notna(df.loc[0, 'fits_on_mkt']) and pd.notna(df.loc[0, 'type_id']):
                 module_info = f"{module_name} (Total: {int(df.loc[0, 'total_stock'])} | Fits: {int(df.loc[0, 'fits_on_mkt'])})"
+                if usage_display:
+                    module_info = f"{module_info} | Used in: {usage_display}"
                 csv_module_info = f"{module_name},{int(df.loc[0, 'type_id'])},{int(df.loc[0, 'total_stock'])},{int(df.loc[0, 'fits_on_mkt'])}\n"
             else:
                 module_info = f"{module_name}"
+                if usage_display:
+                    module_info = f"{module_info} | Used in: {usage_display}"
                 csv_module_info = f"{module_name},0,0,0\n"
 
             st.session_state.module_list_state[module_name] = module_info
@@ -270,36 +316,36 @@ def get_fit_detail_data(fit_id: int) -> pd.DataFrame:
         df = get_all_fitting_data()
         if df.empty:
             return pd.DataFrame()
-        
+
         # Filter by fit_id
         fit_df = df[df['fit_id'] == fit_id].copy()
-        
+
         if fit_df.empty:
             return pd.DataFrame()
-        
+
         # Drop unnecessary columns (keep category_id for sorting)
         columns_to_drop = ['ship_id', 'hulls', 'group_id', 'category_name', 'id', 'timestamp']
         fit_df.drop(columns=[col for col in columns_to_drop if col in fit_df.columns], inplace=True)
-        
+
         # Format numeric columns
         fit_df['type_id'] = round(fit_df['type_id'], 0).astype(int)
         fit_df['fit_id'] = round(fit_df['fit_id'], 0).astype(int)
-        
+
         # Rename for better display
         if 'fits_on_mkt' in fit_df.columns:
             fit_df.rename(columns={'fits_on_mkt': 'Fits on Market'}, inplace=True)
-        
+
         # Sort by category_id first (ships are category 6, lowest used, so ship hull appears first)
         # Then by fits on market (ascending) to show bottlenecks
         if 'category_id' in fit_df.columns and 'Fits on Market' in fit_df.columns:
             fit_df = fit_df.sort_values(by=['category_id', 'Fits on Market'], ascending=[True, True])
         elif 'Fits on Market' in fit_df.columns:
             fit_df = fit_df.sort_values(by='Fits on Market', ascending=True)
-        
+
         fit_df.reset_index(drop=True, inplace=True)
-        
+
         return fit_df
-        
+
     except Exception as e:
         logger.error(f"Error getting fit detail data for fit_id {fit_id}: {e}")
         return pd.DataFrame()
@@ -371,12 +417,12 @@ def calculate_all_jita_deltas(force_refresh: bool = False):
     """
     Calculate Jita price deltas for all fits in the background.
     Stores results in session state for display.
-    
+
     Args:
         force_refresh: If True, bypasses cache check and fetches fresh prices
     """
     import datetime
-    
+
     # Check if already calculated and cache is still valid
     if not force_refresh and 'jita_deltas_calculated' in st.session_state and st.session_state.jita_deltas_calculated:
         # Check cache age (1 hour = 3600 seconds)
@@ -385,38 +431,38 @@ def calculate_all_jita_deltas(force_refresh: bool = False):
             if cache_age < 3600:  # Less than 1 hour old
                 logger.info(f"Using cached Jita deltas (age: {cache_age:.0f} seconds)")
                 return  # Use cached data
-    
+
     if 'jita_deltas' not in st.session_state:
         st.session_state.jita_deltas = {}
-    
+
     # Get the raw fit data
     all_fits_df, summary_df = create_fit_df()
-    
+
     if all_fits_df.empty:
         st.session_state.jita_deltas_calculated = True
         st.session_state.jita_deltas_timestamp = datetime.datetime.now()
         return
-    
+
     fit_ids = all_fits_df['fit_id'].unique()
-    
+
     with st.spinner("Calculating Jita price deltas..."):
         for fit_id in fit_ids:
             try:
                 fit_data = all_fits_df[all_fits_df['fit_id'] == fit_id]
                 fit_summary_data = summary_df[summary_df['fit_id'] == fit_id]
-                
+
                 if not fit_summary_data.empty:
                     total_cost = fit_summary_data['total_cost'].iloc[0] if pd.notna(fit_summary_data['total_cost'].iloc[0]) else 0
-                    
+
                     # Calculate delta
                     jita_fit_cost, jita_cost_delta = calculate_jita_fit_cost_and_delta(fit_data, total_cost)
-                    
+
                     # Store in session state
                     st.session_state.jita_deltas[fit_id] = jita_cost_delta
             except Exception as e:
                 logger.error(f"Error calculating Jita delta for fit_id {fit_id}: {e}")
                 st.session_state.jita_deltas[fit_id] = None
-    
+
     st.session_state.jita_deltas_calculated = True
     st.session_state.jita_deltas_timestamp = datetime.datetime.now()
     logger.info(f"Calculated Jita deltas for {len(st.session_state.jita_deltas)} fits at {st.session_state.jita_deltas_timestamp}")
@@ -436,17 +482,17 @@ def main():
         st.session_state.module_list_state = {}
     if 'csv_module_list_state' not in st.session_state:
         st.session_state.csv_module_list_state = {}
-    
+
     # Clean up any download_fit_* keys that may have been set in session state
     # Download buttons don't support pre-set values in session state
-    download_keys_to_delete = [k for k in st.session_state.keys() 
+    download_keys_to_delete = [k for k in st.session_state.keys()
                                if isinstance(k, str) and k.startswith('download_fit_')]
     for key in download_keys_to_delete:
         del st.session_state[key]
 
     if st.session_state.get('clear_ship_checkboxes', False):
         # Delete all ship checkbox keys that match the pattern
-        keys_to_delete = [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith('ship_') 
+        keys_to_delete = [k for k in st.session_state.keys() if isinstance(k, str) and k.startswith('ship_')
                         and k not in ['selected_ships', 'ship_list_state', 'csv_ship_list_state']]
         for key in keys_to_delete:
             st.session_state[key] = False
@@ -544,7 +590,7 @@ def main():
     # Apply ship group filter
     if selected_group != "All":
         filtered_df = filtered_df[filtered_df['ship_group'] == selected_group]
-    
+
     st.sidebar.checkbox("Show low stock hulls only", value=False, key="show_low_stock_hulls_only")
     if st.session_state.get('show_low_stock_hulls_only', False):
         filtered_df = filtered_df[filtered_df['hulls'] <= filtered_df['target'] * 0.9]
@@ -653,7 +699,7 @@ def main():
                         jita_delta = None
                         if 'jita_deltas' in st.session_state and row['fit_id'] in st.session_state.jita_deltas:
                             jita_delta = st.session_state.jita_deltas[row['fit_id']]
-                        
+
                         if jita_delta is not None and pd.notna(jita_delta):
                             # Format delta as percentage with 2 decimal places
                             delta_str = f"{jita_delta:.2f}%"
@@ -662,7 +708,7 @@ def main():
                             st.metric(label="Fit Cost", value=f"{fit_cost}")
                     else:
                         st.metric(label="Fit Cost", value="N/A")
-                        
+
                 # Progress bar for target percentage
                 target_pct = row['target_percentage']
                 color = "green" if target_pct >= 90 else "orange" if target_pct >= 50 else "red"
@@ -683,31 +729,31 @@ def main():
                     """,
                     unsafe_allow_html=True
                 )
-                
+
                 # Add expandable fitting details section
                 with st.expander("📋 View Full Fitting Details", expanded=False):
                     with st.spinner("Loading fitting data..."):
                         fit_detail_df = get_fit_detail_data(row['fit_id'])
-                        
+
                         if not fit_detail_df.empty:
                             # Display summary info
                             fit_info_col1, fit_info_col2, fit_info_col3 = st.columns(3)
-                            
+
                             with fit_info_col1:
                                 st.metric("Total Items", len(fit_detail_df))
-                            
+
                             with fit_info_col2:
                                 if 'total_stock' in fit_detail_df.columns:
                                     total_value = (fit_detail_df['price'] * fit_detail_df['total_stock']).sum()
                                     st.metric("Total Stock Value", f"{millify(total_value, precision=2)}")
-                            
+
                             with fit_info_col3:
                                 if 'Fits on Market' in fit_detail_df.columns:
                                     bottleneck = fit_detail_df['Fits on Market'].min()
                                     st.metric("Bottleneck (Min Fits)", int(bottleneck))
-                            
+
                             st.markdown("---")
-                            
+
                             # Display the fitting dataframe
                             col_config = get_fitting_column_config()
                             st.dataframe(
@@ -716,7 +762,7 @@ def main():
                                 column_config=col_config,
                                 width='stretch'
                             )
-                            
+
                             # Download button for this specific fit
                             csv = fit_detail_df.to_csv(index=False)
                             st.download_button(
@@ -954,13 +1000,13 @@ def main():
         st.sidebar.info("Select ships and modules to export by checking the boxes next to them.")
 
 
-    
+
     # Jita Price Delta Section
     st.sidebar.markdown("---")
     st.sidebar.subheader("Jita Price Comparison")
-    
+
     jita_calculated = st.session_state.get('jita_deltas_calculated', False)
-    
+
     if not jita_calculated:
         if st.sidebar.button("📊 Calculate Jita Price Deltas", help="Compare fit costs to Jita prices. Requires an external API call, so we calculate on demand to for performance."):
             calculate_all_jita_deltas()
@@ -968,29 +1014,29 @@ def main():
         st.sidebar.info("Click to calculate price comparison with Jita market. Only calculated on demand for performance.")
     else:
         st.sidebar.success(f"✓ Jita deltas calculated for {len(st.session_state.get('jita_deltas', {}))} fits")
-        
+
         # Show when prices were last updated
         if 'jita_deltas_timestamp' in st.session_state:
             import datetime
             timestamp = st.session_state.jita_deltas_timestamp
             cache_age = (datetime.datetime.now() - timestamp).total_seconds()
-            
+
             # Show last updated time
             time_str = timestamp.strftime("%H:%M:%S")
             st.sidebar.caption(f"Last updated: {time_str}")
-            
+
             # Calculate when refresh will be available
             cache_remaining = max(0, 3600 - cache_age)  # 1 hour = 3600 seconds
-            
+
             if cache_remaining > 0:
                 # Cache still valid - show countdown
                 minutes_remaining = int(cache_remaining / 60)
                 seconds_remaining = int(cache_remaining % 60)
                 st.sidebar.caption(f"Cache expires in: {minutes_remaining}m {seconds_remaining}s")
-                
+
                 # Disabled refresh button with info
                 st.sidebar.button(
-                    "🔄 Refresh Jita Prices", 
+                    "🔄 Refresh Jita Prices",
                     help=f"Prices cached for 1 hour. Try again in {minutes_remaining}m {seconds_remaining}s",
                     disabled=True
                 )
