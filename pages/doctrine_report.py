@@ -72,50 +72,54 @@ def get_fit_name_from_db(fit_id: int) -> str:
         logger.error(f"Error: {e}")
         return "Unknown Fit"
 
-def categorize_ship_by_role(ship_name: str) -> str:
-    """Categorize ships by their primary fleet role."""
+def categorize_ship_by_role(ship_name: str, fit_id: int) -> str:
+    """Categorize ships by their primary fleet role.
 
-    # DPS - Primary damage dealers
-    dps_ships = {
-        'Hurricane', 'Hurricane Fleet Issue', 'Ferox', 'Zealot', 'Purifier', 'Tornado', 'Oracle',
-        'Harbinger', 'Brutix', 'Myrmidon', 'Talos', 'Naga', 'Rokh',
-        'Megathron', 'Hyperion', 'Dominix', 'Raven', 'Scorpion Navy Issue',
-        'Raven Navy Issue', 'Typhoon', 'Tempest', 'Maelstrom', 'Abaddon',
-        'Apocalypse', 'Armageddon', 'Rifter', 'Punisher', 'Merlin', 'Incursus',
-        'Bellicose', 'Deimos', 'Nightmare', 'Retribution', 'Vengeance', 'Exequror Navy Issue',
-        'Hound', 'Nemesis', 'Manticore', 'Vulture', 'Moa', 'Harpy', 'Tempest Fleet Issue', 'Hurricane Fleet Issue',
-        'Apocalypse Navy Issue', 'Kikimora', 'Cyclone Fleet Issue'
-    }
+    Args:
+        ship_name: Name of the ship
+        fit_id: Fit ID for special case handling
 
-    # Logi - Logistics/healing ships
-    logi_ships = {
-        'Osprey', 'Guardian', 'Basilisk', 'Scimitar', 'Oneiros',
-        'Burst', 'Bantam', 'Inquisitor', 'Navitas', 'Zarmazd', 'Deacon', 'Thalia', 'Kirin'
-    }
+    Returns:
+        Role category: "DPS", "Logi", "Links", or "Support"
+    """
+    # Convert fit_id to str to match TOML format
+    fit_id_str = str(fit_id)
 
-    # Links - Command ships and fleet booster ships
-    links_ships = {
-        'Claymore', 'Drake', 'Cyclone', 'Sleipnir', 'Nighthawk',
-        'Damnation', 'Astarte', 'Command Destroyer', 'Bifrost', 'Pontifex',
-        'Stork', 'Magus', 'Hecate', 'Confessor', 'Jackdaw',
-    }
+    import tomllib
 
-    # Support - EWAR, tackle, interdiction, etc.
-    support_ships = {
-        'Sabre', 'Stiletto', 'Malediction', 'Huginn', 'Rapier', 'Falcon',
-        'Blackbird', 'Celestis', 'Arbitrator', 'Vigil',
-        'Griffin', 'Maulus', 'Crucifier', 'Heretic', 'Flycatcher',
-        'Eris', 'Dictor', 'Hictor', 'Broadsword', 'Phobos', 'Onyx',
-        'Crow', 'Claw', 'Crusader', 'Taranis', 'Atron', 'Slasher',
-        'Executioner', 'Condor', 'Svipul', 'Devoter', 'Porpoise', 'Nereus'
-    }
-
-    # Check each category
-    if ship_name in dps_ships:
-        if ship_name == 'Vulture':
+    # Load configuration from settings.toml
+    settings_path = pathlib.Path(__file__).parent.parent / "settings.toml"
+    try:
+        with open(settings_path, "rb") as f:
+            settings = tomllib.load(f)
+    except FileNotFoundError:
+        logger.error(f"settings.toml not found at {settings_path}")
+        # Fall back to legacy keyword matching
+        if any(keyword in ship_name.lower() for keyword in ['hurricane', 'ferox', 'zealot', 'bellicose']):
             return "DPS"
+        elif any(keyword in ship_name.lower() for keyword in ['osprey', 'guardian', 'basilisk']):
+            return "Logi"
+        elif any(keyword in ship_name.lower() for keyword in ['claymore', 'drake', 'cyclone']):
+            return "Links"
         else:
-            return "DPS"
+            return "Support"
+
+    # Extract role lists from settings
+    dps_ships = settings.get('ship_roles', {}).get('dps', [])
+    logi_ships = settings.get('ship_roles', {}).get('logi', [])
+    links_ships = settings.get('ship_roles', {}).get('links', [])
+    support_ships = settings.get('ship_roles', {}).get('support', [])
+    special_cases = settings.get('ship_roles', {}).get('special_cases', {})
+
+    # Check special cases first (Ship Name + Fit ID lookup)
+    if ship_name in special_cases:
+        ship_special_cases = special_cases[ship_name]
+        if fit_id_str in ship_special_cases:
+            return ship_special_cases[fit_id_str]
+
+    # Standard category checks
+    if ship_name in dps_ships:
+        return "DPS"
     elif ship_name in logi_ships:
         return "Logi"
     elif ship_name in links_ships:
@@ -123,7 +127,7 @@ def categorize_ship_by_role(ship_name: str) -> str:
     elif ship_name in support_ships:
         return "Support"
     else:
-        # Default categorization based on ship name patterns
+        # Fallback keyword matching (legacy support)
         if any(keyword in ship_name.lower() for keyword in ['hurricane', 'ferox', 'zealot', 'bellicose']):
             return "DPS"
         elif any(keyword in ship_name.lower() for keyword in ['osprey', 'guardian', 'basilisk']):
@@ -142,13 +146,12 @@ def display_categorized_doctrine_data(selected_data):
 
     # Create a proper copy of the DataFrame to avoid SettingWithCopyWarning
     selected_data_with_roles = selected_data.copy()
-    selected_data_with_roles['role'] = selected_data_with_roles['ship_name'].apply(categorize_ship_by_role)
 
-    # Handle special case for Vulture ships based on fit_id
-    vulture_mask = selected_data_with_roles['ship_name'] == 'Vulture'
-    if vulture_mask.any():
-        selected_data_with_roles.loc[vulture_mask & (selected_data_with_roles['fit_id'] == 369), 'role'] = 'DPS'
-        selected_data_with_roles.loc[vulture_mask & (selected_data_with_roles['fit_id'] != 369), 'role'] = 'Links'
+    # NEW: Pass both ship_name and fit_id to the categorization function
+    selected_data_with_roles['role'] = selected_data_with_roles.apply(
+        lambda row: categorize_ship_by_role(row['ship_name'], row['fit_id']),
+        axis=1
+    )
 
     # Remove fit_id 474 using loc
     selected_data_with_roles = selected_data_with_roles.loc[selected_data_with_roles['fit_id'] != 474]
@@ -204,8 +207,12 @@ def display_categorized_doctrine_data(selected_data):
             df['ship_target'] = df['ship_target'] * st.session_state.target_multiplier
             df['target_percentage'] = round(df['fits'] / df['ship_target'], 2)
 
+            # Dynamic height calculation
+            # 40px per row approximation + 50px header buffer
+            static_height = len(df) * 40 + 50 if len(df) < 10 else None
+
             st.dataframe(
-                df, 
+                df,
                 column_config={
                     'target_percentage': st.column_config.ProgressColumn(
                         "Target %",
@@ -251,7 +258,8 @@ def display_categorized_doctrine_data(selected_data):
 
                 },
                 width='content',
-                hide_index=True
+                hide_index=True,
+                height=static_height
             )
 
 
