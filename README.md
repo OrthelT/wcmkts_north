@@ -122,6 +122,12 @@ Adds interactive market ISK volume charting to Market Stats, including moving av
   - Advanced filtering by status, group, and stock levels
   - Export functionality for modules and ships
 
+- **Ship Role Categorization**
+  - Configuration-driven role assignment (DPS, Logi, Links, Support)
+  - Special case handling for dual-role ships based on fit_id
+  - Dynamic table heights for optimal display
+  - Ships can be recategorized via `settings.toml` without code changes
+
 - **Build Cost Analysis**
   - Real-time build cost calculations across multiple structures
   - Material efficiency (ME) and time efficiency (TE) optimization
@@ -159,7 +165,13 @@ SDE_URL=your_sde_url
 SDE_AUTH_TOKEN=your_sde_auth_token
 ```
 
-4. Run the application:
+4. Configure ship roles (optional):
+The `settings.toml` file contains ship role categorization. Edit this file to:
+- Add new ships to role categories (DPS, Logi, Links, Support)
+- Define special cases for ships with multiple roles
+- Customize categorization for your specific doctrines
+
+5. Run the application:
 ```bash
 streamlit run app.py
 ```

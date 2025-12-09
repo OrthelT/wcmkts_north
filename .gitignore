@@ -77,3 +77,4 @@ dev.py
 dev/
 types.jsonl
 .cursor/
+settings.toml.bak
