@@ -309,5 +309,6 @@ Streamlit frontend (`app.py` + `pages/`) backed by local LibSQL replicas synced 
 ✅ COMPLETED - Dynamic ship role categorization
   - Configuration-driven role assignment via settings.toml
   - Special case handling for dual-role ships based on fit_id
-  - All 18 tests passing
+  - Comprehensive test suite with 36 tests (all passing)
   - Documentation updated
+  - Test coverage: config validation, function behavior, fallback, integration

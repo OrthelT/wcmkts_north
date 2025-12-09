@@ -22,7 +22,7 @@
 
     # Links - Command ships and fleet booster ships
     links = [
-        'Claymore', 'Devoter', 'Cyclone', 'Sleipnir', 'Nighthawk',
+        'Claymore', 'Cyclone', 'Sleipnir', 'Nighthawk',
         'Damnation', 'Astarte', 'Command Destroyer', 'Bifrost', 'Pontifex',
         'Stork', 'Magus', 'Hecate', 'Confessor', 'Jackdaw', 'Eos'
     ]
@@ -34,7 +34,7 @@
         'Griffin', 'Maulus', 'Crucifier', 'Heretic', 'Flycatcher',
         'Eris', 'Dictor', 'Hictor', 'Broadsword', 'Phobos', 'Onyx',
         'Crow', 'Claw', 'Crusader', 'Taranis', 'Atron', 'Slasher',
-        'Executioner', 'Condor', 'Svipul', 'Porpoise', 'Nereus'
+        'Executioner', 'Condor', 'Svipul', 'Porpoise', 'Nereus', 'Devoter'
     ]
 
     # Special cases: Map Ship Name -> { Fit ID -> Role }
