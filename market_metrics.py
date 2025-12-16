@@ -858,7 +858,7 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
 
             if st.session_state.jita_price is not None:
                 display_jita_price = millify.millify(st.session_state.jita_price, precision=2)
-                st.metric("Jita Price", f"{display_jita_price} ISK")
+                st.metric("Jita Sell Price", f"{display_jita_price} ISK")
             
     with col2:
         if not sell_data.empty:
@@ -933,7 +933,7 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
             pass
 
 def calculate_capital_utility_ratio(staging_price: float, jita_price: float, avg_daily_vol: float, type_id: int)->float:
-    """
+    """m
     Calculate the capital utility ratio
     """
     type_info = TypeInfo(type_id)
