@@ -248,13 +248,10 @@ def get_fitting_data(type_id):
         df2 = df.copy()
         df2 = df2[df2['type_id'] == type_id]
         df2.reset_index(drop=True, inplace=True)
-        try:
-            fit_id = df2.iloc[0]['fit_id']
-        except (IndexError, KeyError):
-            return None
-
+        fit_ids = df2['fit_id'].unique()
+        logger.info(f"Fit IDs: {fit_ids}")
         df3 = df.copy()
-        df3 = df3[df3['fit_id'] == fit_id]
+        df3 = df3[df3['fit_id'].isin(fit_ids)]
         df3.reset_index(drop=True, inplace=True)
 
         df3.drop(columns=['ship_id', 'hulls', 'group_id', 'category_name', 'id', 'timestamp'], inplace=True)

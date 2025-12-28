@@ -859,7 +859,7 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
             if st.session_state.jita_price is not None:
                 display_jita_price = millify.millify(st.session_state.jita_price, precision=2)
                 st.metric("Jita Sell Price", f"{display_jita_price} ISK")
-            
+
     with col2:
         if not sell_data.empty:
             volume = sell_data['volume_remain'].sum()
@@ -909,25 +909,41 @@ def render_current_market_status_ui(sell_data, stats, selected_item, sell_order_
         if fit_df is not None and fit_df.empty is False and fits_on_mkt is not None:
             if cat_id == 6:
                 fits = fit_df['fit_id'].unique()
+                logger.info(f"Fits: {fits}")
                 display_fits_on_mkt = f"{fits_on_mkt:,.0f}"
                 target = None
+                logger.info(f"Fits: {fits}")
+                logger.info(len(fits))
                 if len(fits) == 1:
-                    target = get_target_from_fit_id(fits[0])
-                    fits_on_mkt_delta = round(fits_on_mkt - target, 0)
-                    st.metric("Fits on Market", f"{display_fits_on_mkt}", delta=f"{fits_on_mkt_delta}")
+                    logger.info(f"Fits length is 1")
+                    try:
+                        target = get_target_from_fit_id(fits[0])
+                        fits_on_mkt_delta = round(fits_on_mkt - target, 0)
+                        st.metric("Fits on Market", f"{display_fits_on_mkt}", delta=f"{fits_on_mkt_delta}")
+
+                    except Exception as e:
+                        logger.error(f"Error getting target from fit_id: {fits[0]}: {e}")
+                        target = None
                 elif len(fits) > 1:
                     try:
                         for fit in fits:
-                            target = get_target_from_fit_id(fit)
-                            fits_on_mkt_delta = fits_on_mkt - target
-                            st.write(f"Fit: {fit}, Target: {target}, Fits on Market: {fits_on_mkt}, Delta: {fits_on_mkt_delta}")
+                            try:
+                                target = get_target_from_fit_id(fit)
+                                fits_on_mkt_delta = fits_on_mkt - target
+                                st.write(f"Fit: {fit}, Target: {target}, Fits on Market: {fits_on_mkt}, Delta: {fits_on_mkt_delta}")
+                            except Exception as e:
+                                logger.error(f"Error getting target from fit_id: {fit}: {e}, skipping fit")
+                                continue
                     except Exception as e:
-                        logger.error(f"Error getting target from fit_id: {fit}: {e}")
+                        logger.error(f"Error getting target from fit_id: {fit}: {e}, skipping fit")
+                        pass
                 else:
                     st.metric("Fits on Market", f"{display_fits_on_mkt}")
 
                 if target is not None:
                     st.write(f"Target: {target}")
+                else:
+                    st.metric("Fits on Market", f"{display_fits_on_mkt}")
 
         else:
             pass
