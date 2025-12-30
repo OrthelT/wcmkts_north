@@ -756,50 +756,7 @@ def main():
                     unsafe_allow_html=True
                 )
 
-                # Add expandable fitting details section
-                with st.expander("📋 View Full Fitting Details", expanded=False):
-                    with st.spinner("Loading fitting data..."):
-                        fit_detail_df = get_fit_detail_data(row['fit_id'])
 
-                        if not fit_detail_df.empty:
-                            # Display summary info
-                            fit_info_col1, fit_info_col2, fit_info_col3 = st.columns(3)
-
-                            with fit_info_col1:
-                                st.metric("Total Items", len(fit_detail_df))
-
-                            with fit_info_col2:
-                                if 'total_stock' in fit_detail_df.columns:
-                                    total_value = (fit_detail_df['price'] * fit_detail_df['total_stock']).sum()
-                                    st.metric("Total Stock Value", f"{millify(total_value, precision=2)}")
-
-                            with fit_info_col3:
-                                if 'Fits on Market' in fit_detail_df.columns:
-                                    bottleneck = fit_detail_df['Fits on Market'].min()
-                                    st.metric("Bottleneck (Min Fits)", int(bottleneck))
-
-                            st.markdown("---")
-
-                            # Display the fitting dataframe
-                            col_config = get_fitting_column_config()
-                            st.dataframe(
-                                fit_detail_df,
-                                hide_index=True,
-                                column_config=col_config,
-                                width='stretch'
-                            )
-
-                            # Download button for this specific fit
-                            csv = fit_detail_df.to_csv(index=False)
-                            st.download_button(
-                                label=f"📥 Download Fit {row['fit_id']} Data",
-                                data=csv,
-                                file_name=f"fit_{row['fit_id']}_{row['ship_name'].replace(' ', '_')}.csv",
-                                mime="text/csv",
-                                key=f"download_fit_{row['fit_id']}"
-                            )
-                        else:
-                            st.info("No detailed fitting data available for this fit.")
 
             with col3:
                 # Low stock modules with selection checkboxes
@@ -851,7 +808,50 @@ def main():
 
             # Add a thinner divider between fits
             st.markdown("<hr style='margin: 0.5em 0; border-width: 1px'>", unsafe_allow_html=True)
+ # Add expandable fitting details section
+        with st.expander("📋 View Full Fitting Details", expanded=False):
+            with st.spinner("Loading fitting data..."):
+                fit_detail_df = get_fit_detail_data(row['fit_id'])
 
+                if not fit_detail_df.empty:
+                    # Display summary info
+                    fit_info_col1, fit_info_col2, fit_info_col3 = st.columns(3)
+
+                    with fit_info_col1:
+                        st.metric("Total Items", len(fit_detail_df))
+
+                    with fit_info_col2:
+                        if 'total_stock' in fit_detail_df.columns:
+                            total_value = (fit_detail_df['price'] * fit_detail_df['total_stock']).sum()
+                            st.metric("Total Stock Value", f"{millify(total_value, precision=2)}")
+
+                    with fit_info_col3:
+                        if 'Fits on Market' in fit_detail_df.columns:
+                            bottleneck = fit_detail_df['Fits on Market'].min()
+                            st.metric("Bottleneck (Min Fits)", int(bottleneck))
+
+                    st.markdown("---")
+
+                    # Display the fitting dataframe
+                    col_config = get_fitting_column_config()
+                    st.dataframe(
+                        fit_detail_df,
+                        hide_index=True,
+                        column_config=col_config,
+                        width='stretch'
+                    )
+
+                    # Download button for this specific fit
+                    csv = fit_detail_df.to_csv(index=False)
+                    st.download_button(
+                        label=f"📥 Download Fit {row['fit_id']} Data",
+                        data=csv,
+                        file_name=f"fit_{row['fit_id']}_{row['ship_name'].replace(' ', '_')}.csv",
+                        mime="text/csv",
+                        key=f"download_fit_{row['fit_id']}"
+                    )
+                else:
+                    st.info("No detailed fitting data available for this fit.")
         # Add divider between groups
         # st.markdown("<hr style='margin: 1.5em 0; border-width: 2px'>", unsafe_allow_html=True)
 
