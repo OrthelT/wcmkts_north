@@ -14,61 +14,15 @@ from utils import get_jita_price, get_multi_item_jita_price
 # Insert centralized logging configuration
 logger = setup_logging(__name__)
 
-# Import target handling functions if set_targets.py exists
-try:
-    from set_targets import get_target_from_db
-    USE_DB_TARGETS = True
-except ImportError:
-    USE_DB_TARGETS = False
-
-# Targets for different ship types (for front-end display)
-# In production, consider moving this to a database table
-SHIP_TARGETS = {
-    'Flycatcher': 20,
-    'Griffin': 20,
-    'Guardian': 25,
-    'Harpy': 100,
-    'Heretic': 20,
-    'Hound': 50,
-    'Huginn': 20,
-    'Hurricane': 100,
-    # Add more ships as needed
-    'default': 20  # Default target if ship not found
-}
-
 mktdb = DatabaseConfig("wcmkt")
-
-def get_target_value(ship_name):
-    """Get the target value for a ship type"""
-    # First try to get from database if available
-    if USE_DB_TARGETS:
-        try:
-            return get_target_from_db(ship_name)
-        except Exception as e:
-            logger.error(f"Error getting target from database: {e}")
-            # Fall back to dictionary if database lookup fails
-
-    # Convert to title case for standardized lookup in dictionary
-    ship_name = ship_name.title() if isinstance(ship_name, str) else ''
-
-    # Look up in the targets dictionary, default to 20 if not found
-    return SHIP_TARGETS.get(ship_name, SHIP_TARGETS['default'])
 
 def get_target_from_fit_id(fit_id):
     """Get the target value for a fit id"""
     df = new_read_df(mktdb, text("SELECT * FROM ship_targets WHERE fit_id = :fit_id"), {"fit_id": fit_id})
-    return df.loc[0, 'ship_target']
-
-def get_target_values_batch(ship_names):
-    """Get target values for multiple ship types efficiently"""
-    if USE_DB_TARGETS:
-        # If using DB, still call individual functions for now
-        # TODO: Implement batch DB lookup if needed
-        return [get_target_value(name) for name in ship_names]
-
-    # For dictionary lookup, use vectorized pandas operations
-    ship_names_title = pd.Series(ship_names).str.title().fillna('')
-    return ship_names_title.map(SHIP_TARGETS).fillna(SHIP_TARGETS['default']).tolist()
+    if df.empty:
+        logger.warning(f"No target found for fit_id {fit_id}")
+        return 0
+    return df.iloc[0]['ship_target']
 
 def new_get_targets():
     df = new_read_df(mktdb, text("SELECT * FROM ship_targets"))
@@ -76,36 +30,36 @@ def new_get_targets():
 
 @st.cache_data(ttl=600, show_spinner="Loading cached doctrine fits...")
 def create_fit_df()->pd.DataFrame:
-    logger.info("Creating fit dataframe using get_all_fit_data()")
+    logger.info("Creating fit dataframe")
+    t0 = time.perf_counter()
     df = get_all_fit_data()
+    t1 = time.perf_counter()
+    elapsed_time = round((t1 - t0)*1000, 2)
+    logger.info(f"TIME get_all_fit_data() = {elapsed_time} ms")
 
     if df.empty:
-        logger.warning("No doctrine fits found in the database.")
         return pd.DataFrame(), pd.DataFrame()
 
+    # Use vectorized operations instead of iterating through each fit
+    logger.info("Processing fit data with vectorized operations")
 
     # Group by fit_id and aggregate data efficiently
     fit_summary = df.groupby('fit_id').agg({
         'ship_name': 'first',
         'ship_id': 'first',
         'hulls': 'first',
-        'fits_on_mkt': 'min'
+        'fits_on_mkt': 'min',
     }).reset_index()
 
-    # Get ship group and price data efficiently (where type_id == ship_id)
+        # Get ship group and price data efficiently
     ship_data = df[df['type_id'] == df['ship_id']].groupby('fit_id').agg({
         'group_name': 'first',
-        'price': 'first'
-    }).reset_index()
-
-    # Get avg_vol from ship row (where type_id == ship_id OR category_id == 6)
-    ship_avg_vol = df[(df['type_id'] == df['ship_id']) | (df['category_id'] == 6)].groupby('fit_id').agg({
-        'avg_vol': 'first'
+        'price': 'first',
+        'avg_vol': 'first',
     }).reset_index()
 
     # Merge the data
     fit_summary = fit_summary.merge(ship_data, on='fit_id', how='left')
-    fit_summary = fit_summary.merge(ship_avg_vol, on='fit_id', how='left')
     fit_summary['price'] = fit_summary['price'].fillna(0)
     fit_summary['ship_group'] = fit_summary['group_name']
 
@@ -175,7 +129,6 @@ def create_fit_df()->pd.DataFrame:
         # Fill any remaining nulls with 0 as final fallback
         if df['price'].isna().any():
             logger.warning("Still have null prices after filling with Jita price")
-            st.warning("Still have null prices after filling with Jita price")
             null_type_ids = df[df['price'].isna()]['type_id'].unique().tolist()
             for type_id in null_type_ids:
                 logger.warning(f"Null price for type_id {type_id}")
@@ -188,11 +141,17 @@ def create_fit_df()->pd.DataFrame:
     fit_summary = fit_summary.merge(fit_cost, on='fit_id', how='left')
     fit_summary['total_cost'] = fit_summary['total_cost'].fillna(0)
 
+    # Get target values for all ships at once (batch operation)
+    t2 = time.perf_counter()
     targets_df = new_get_targets()
     targets_df = targets_df.drop_duplicates(subset=['fit_id'], keep='first')
     targets_df = targets_df.reset_index(drop=True)
     targets_df = targets_df[['fit_id', 'ship_target']]
     fit_summary = fit_summary.merge(targets_df, on='fit_id', how='left')
+
+    t3 = time.perf_counter()
+    elapsed_time = round((t3 - t2)*1000, 2)
+    logger.info(f"TIME new_get_targets() = {elapsed_time} ms")
 
     # Calculate target percentages vectorized
     fit_summary['target_percentage'] = (
@@ -276,11 +235,8 @@ def calculate_jita_fit_cost_and_delta(
     else:
         percentage_delta = None
         if current_fit_cost > 0:
-            logger.warning(
-                "Jita fit cost is 0 but current fit cost is %s, cannot calculate delta. "
-                "This may indicate missing Jita prices for some items in the fit.",
-                current_fit_cost,
-            )
+            logger.warning(f"Jita fit cost is 0 but current fit cost is {current_fit_cost}, cannot calculate delta. "
+                          f"This may indicate missing Jita prices for some items in the fit.")
 
     return jita_fit_cost, percentage_delta
 
@@ -288,35 +244,25 @@ def calculate_jita_fit_cost_and_delta(
 def get_all_fit_data()->pd.DataFrame:
     """Create a dataframe with all fit information"""
     logger.info("Getting fit info from doctrines table")
+    query = "SELECT * FROM doctrines"
 
-    # Get fit_ids from ship_targets
-    query1 = "SELECT * FROM ship_targets"
-    try:
+    def _read_all():
         with mktdb.local_access():
             with mktdb.engine.connect() as conn:
-                targets_df = pd.read_sql_query(query1, conn)
-        fit_ids = targets_df['fit_id'].tolist()
+                return pd.read_sql_query(query, conn)
+
+    try:
+        df = _read_all()
     except Exception as e:
         logger.error(f"Failed to get fit data: {str(e)}")
-        return pd.DataFrame()
+        try:
+            mktdb.sync()
+            df = _read_all()
+        except Exception as e2:
+            logger.error(f"Failed to get fit data after sync: {str(e2)}")
+            raise
 
-    # Get doctrine data for those fit_ids
-    if not fit_ids:
-        logger.warning("No fit_ids found in ship_targets")
-        return pd.DataFrame()
-
-    # Create placeholder string for IN clause
-    placeholders = ','.join(['?'] * len(fit_ids))
-    query2 = f"SELECT * FROM doctrines WHERE fit_id IN ({placeholders})"
-
-    try:
-        with mktdb.local_access():
-            with mktdb.engine.connect() as conn:
-                df = pd.read_sql_query(query2, conn, params=tuple(fit_ids))
-        return df
-    except Exception as e:
-        logger.error(f"Failed to get doctrine data: {str(e)}")
-        return pd.DataFrame()
+    return df
 
 if __name__ == "__main__":
     pass

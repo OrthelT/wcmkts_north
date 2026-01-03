@@ -218,6 +218,7 @@ def get_module_stock_list(module_names: list):
         #with the session state variables, we can now return the lists by saving to the session state variables, we
         #won't need to run the query again
 
+@st.cache_data(ttl=600, show_spinner="Loading cached ship stock list...")
 def get_ship_stock_list(ship_names: list):
     if not st.session_state.get('ship_list_state'):
         st.session_state.ship_list_state = {}
